@@ -99,7 +99,8 @@ private slots:
 #ifndef QT_NO_CLIPBOARD
     void copyAndSelectAllInReadonly();
 #endif
-    void ctrlAltInput();
+    void charWithAltOrCtrlModifier_data();
+    void charWithAltOrCtrlModifier();
     void noPropertiesOnDefaultTextEditCharFormat();
     void setPlainTextShouldEmitTextChangedOnce();
     void overwriteMode();
@@ -148,6 +149,7 @@ private slots:
 #endif
     void layoutAfterMultiLineRemove();
     void undoCommandRemovesAndReinsertsBlock();
+    void taskQTBUG_43562_lineCountCrash();
 
 private:
     void createSelection();
@@ -690,10 +692,34 @@ void tst_QPlainTextEdit::copyAndSelectAllInReadonly()
 }
 #endif
 
-void tst_QPlainTextEdit::ctrlAltInput()
+Q_DECLARE_METATYPE(Qt::KeyboardModifiers)
+
+// Test how QWidgetTextControlPrivate (used in QPlainTextEdit, QTextEdit)
+// handles input with modifiers.
+void tst_QPlainTextEdit::charWithAltOrCtrlModifier_data()
 {
-    QTest::keyClick(ed, Qt::Key_At, Qt::ControlModifier | Qt::AltModifier);
-    QCOMPARE(ed->toPlainText(), QString("@"));
+    QTest::addColumn<Qt::KeyboardModifiers>("modifiers");
+    QTest::addColumn<bool>("textExpected");
+
+    QTest::newRow("no-modifiers") << Qt::KeyboardModifiers() << true;
+    // Ctrl, Ctrl+Shift: No text (QTBUG-35734)
+    QTest::newRow("ctrl") << Qt::KeyboardModifiers(Qt::ControlModifier)
+        << false;
+    QTest::newRow("ctrl-shift") << Qt::KeyboardModifiers(Qt::ShiftModifier | Qt::ControlModifier)
+        << false;
+    QTest::newRow("alt") << Qt::KeyboardModifiers(Qt::AltModifier) << true;
+    // Alt-Ctrl (Alt-Gr on German keyboards, Task 129098): Expect text
+    QTest::newRow("alt-ctrl") << (Qt::AltModifier | Qt::ControlModifier) << true;
+}
+
+void tst_QPlainTextEdit::charWithAltOrCtrlModifier()
+{
+    QFETCH(Qt::KeyboardModifiers, modifiers);
+    QFETCH(bool, textExpected);
+
+    QTest::keyClick(ed, Qt::Key_At, modifiers);
+    const QString expectedText = textExpected ?  QLatin1String("@") : QString();
+    QCOMPARE(ed->toPlainText(), expectedText);
 }
 
 void tst_QPlainTextEdit::noPropertiesOnDefaultTextEditCharFormat()
@@ -1627,6 +1653,38 @@ void tst_QPlainTextEdit::undoCommandRemovesAndReinsertsBlock()
         QVERIFY(block.layout()->lineForTextPosition(0).isValid());
     }
 
+}
+
+class ContentsChangedFunctor {
+public:
+    ContentsChangedFunctor(QPlainTextEdit *t) : textEdit(t) {}
+    void operator()(int, int, int)
+    {
+        QTextCursor c(textEdit->textCursor());
+        c.beginEditBlock();
+        c.movePosition(QTextCursor::Start);
+        c.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
+        c.setCharFormat(QTextCharFormat());
+        c.endEditBlock();
+    }
+
+private:
+    QPlainTextEdit *textEdit;
+};
+
+void tst_QPlainTextEdit::taskQTBUG_43562_lineCountCrash()
+{
+    connect(ed->document(), &QTextDocument::contentsChange, ContentsChangedFunctor(ed));
+    // Don't crash
+    QTest::keyClicks(ed, "Some text");
+    QTest::keyClick(ed, Qt::Key_Left);
+    QTest::keyClick(ed, Qt::Key_Right);
+    QTest::keyClick(ed, Qt::Key_A);
+    QTest::keyClick(ed, Qt::Key_Left);
+    QTest::keyClick(ed, Qt::Key_Right);
+    QTest::keyClick(ed, Qt::Key_Space);
+    QTest::keyClicks(ed, "nd some more");
+    disconnect(ed->document(), SIGNAL(contentsChange(int, int, int)), 0, 0);
 }
 
 QTEST_MAIN(tst_QPlainTextEdit)

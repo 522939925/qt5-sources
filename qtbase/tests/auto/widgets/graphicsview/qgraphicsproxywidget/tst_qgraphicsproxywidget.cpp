@@ -175,6 +175,8 @@ private slots:
     void windowFrameMargins();
     void QTBUG_6986_sendMouseEventToAlienWidget();
     void mapToGlobal();
+    void mapToGlobalWithoutScene();
+    void QTBUG_43780_visibility();
 };
 
 // Subclass that exposes the protected functions.
@@ -278,6 +280,8 @@ void tst_QGraphicsProxyWidget::initTestCase()
     // Disable menu animations to prevent the alpha widget from getting in the way
     // in actionsContextMenu().
     QApplication::setEffectEnabled(Qt::UI_AnimateMenu, false);
+    // Disable combo for QTBUG_43780_visibility()/Windows Vista.
+    QApplication::setEffectEnabled(Qt::UI_AnimateCombo, false);
 }
 
 // This will be called after the last test function is executed.
@@ -3685,6 +3689,52 @@ void tst_QGraphicsProxyWidget::mapToGlobal() // QTBUG-41135
              qPrintable(QStringLiteral("%1, %2 != %3, %4")
                         .arg(viewCenter.x()).arg(viewCenter.y())
                         .arg(embeddedCenterGlobal.x()).arg(embeddedCenterGlobal.y())));
+}
+
+void tst_QGraphicsProxyWidget::mapToGlobalWithoutScene() // QTBUG-44509
+{
+    QGraphicsProxyWidget proxyWidget;
+    QWidget *embeddedWidget = new QWidget;
+    proxyWidget.setWidget(embeddedWidget);
+    const QPoint localPos(0, 0);
+    const QPoint globalPos = embeddedWidget->mapToGlobal(localPos);
+    QCOMPARE(embeddedWidget->mapFromGlobal(globalPos), localPos);
+}
+
+// QTBUG_43780: Embedded widgets have isWindow()==true but showing them should not
+// trigger the top-level widget code path of show() that closes all popups
+// (for example combo popups).
+void tst_QGraphicsProxyWidget::QTBUG_43780_visibility()
+{
+    const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
+    const QSize size = availableGeometry.size() / 4;
+    QWidget mainWindow;
+    QVBoxLayout *layout = new QVBoxLayout(&mainWindow);
+    QComboBox *combo = new QComboBox(&mainWindow);
+    combo->addItems(QStringList() << "i1" << "i2" << "i3");
+    layout->addWidget(combo);
+    QGraphicsScene *scene = new QGraphicsScene(&mainWindow);
+    QGraphicsView *view = new QGraphicsView(scene, &mainWindow);
+    layout->addWidget(view);
+    mainWindow.setWindowTitle(QTest::currentTestFunction());
+    mainWindow.resize(size);
+    mainWindow.move(availableGeometry.topLeft()
+                    + QPoint(availableGeometry.width() - size.width(),
+                             availableGeometry.height() - size.height()) / 2);
+    QLabel *label = new QLabel(QTest::currentTestFunction());
+    scene->addWidget(label);
+    label->hide();
+    mainWindow.show();
+    combo->setFocus();
+    mainWindow.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&mainWindow));
+    combo->showPopup();
+    QWidget *comboPopup = combo->view()->window();
+    QVERIFY(comboPopup);
+    QVERIFY(QTest::qWaitForWindowExposed(comboPopup));
+    label->show();
+    QTRY_VERIFY(label->isVisible());
+    QVERIFY(comboPopup->isVisible());
 }
 
 QTEST_MAIN(tst_QGraphicsProxyWidget)

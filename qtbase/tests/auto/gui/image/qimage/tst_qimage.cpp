@@ -173,9 +173,6 @@ private slots:
     void invertPixelsRGB_data();
     void invertPixelsRGB();
 
-    void exifOrientation_data();
-    void exifOrientation();
-
     void cleanupFunctions();
 
 private:
@@ -2456,12 +2453,15 @@ void tst_QImage::inplaceConversion_data()
     QTest::addColumn<QImage::Format>("format");
     QTest::addColumn<QImage::Format>("dest_format");
 
+    QTest::newRow("Format_RGB32 -> RGB16") << QImage::Format_RGB32 << QImage::Format_RGB16;
     QTest::newRow("Format_ARGB32 -> Format_RGBA8888") << QImage::Format_ARGB32 << QImage::Format_RGBA8888;
     QTest::newRow("Format_RGB888 -> Format_ARGB6666_Premultiplied") << QImage::Format_RGB888 << QImage::Format_ARGB6666_Premultiplied;
     QTest::newRow("Format_RGB16 -> Format_RGB555") << QImage::Format_RGB16 << QImage::Format_RGB555;
     QTest::newRow("Format_RGB666 -> Format_RGB888") << QImage::Format_RGB666 << QImage::Format_RGB888;
     QTest::newRow("Format_ARGB8565_Premultiplied, Format_ARGB8555_Premultiplied") << QImage::Format_ARGB8565_Premultiplied << QImage::Format_ARGB8555_Premultiplied;
     QTest::newRow("Format_ARGB4444_Premultiplied, Format_RGB444") << QImage::Format_ARGB4444_Premultiplied << QImage::Format_RGB444;
+    QTest::newRow("Format_RGBA8888 -> RGB16") << QImage::Format_RGBA8888 << QImage::Format_RGB16;
+    QTest::newRow("Format_RGBA8888_Premultiplied -> RGB16") << QImage::Format_RGBA8888_Premultiplied << QImage::Format_RGB16;
 }
 
 void tst_QImage::inplaceConversion()
@@ -2480,6 +2480,7 @@ void tst_QImage::inplaceConversion()
     const uchar* originalPtr = image.constScanLine(0);
 
     QImage imageConverted = std::move(image).convertToFormat(dest_format);
+    QCOMPARE(imageConverted.format(), dest_format);
     for (int i = 0; i < imageConverted.height(); ++i) {
         for (int j = 0; j < imageConverted.width(); ++j) {
             QRgb convertedColor = imageConverted.pixel(j,i);
@@ -2487,8 +2488,26 @@ void tst_QImage::inplaceConversion()
             QCOMPARE(qGreen(convertedColor) & 0xF0, i * 16);
         }
     }
+    if (image.depth() == imageConverted.depth())
+        QCOMPARE(imageConverted.constScanLine(0), originalPtr);
 
-    QCOMPARE(imageConverted.constScanLine(0), originalPtr);
+    {
+        // Test attempted inplace conversion of images created on existing buffer
+        static const quint32 readOnlyData[] = { 0x00010203U, 0x04050607U, 0x08091011U, 0x12131415U };
+        quint32 readWriteData[] = { 0x00010203U, 0x04050607U, 0x08091011U, 0x12131415U };
+
+        QImage roImage((const uchar *)readOnlyData, 2, 2, format);
+        QImage roInplaceConverted = std::move(roImage).convertToFormat(dest_format);
+
+        QImage rwImage((uchar *)readWriteData, 2, 2, format);
+        QImage rwInplaceConverted = std::move(rwImage).convertToFormat(dest_format);
+
+        QImage roImage2((const uchar *)readOnlyData, 2, 2, format);
+        QImage normalConverted = roImage2.convertToFormat(dest_format);
+
+        QCOMPARE(normalConverted, roInplaceConverted);
+        QCOMPARE(normalConverted, rwInplaceConverted);
+    }
 #endif
 }
 
@@ -2625,36 +2644,6 @@ void tst_QImage::invertPixelsRGB()
     QCOMPARE(qRed(pixel) >> 4, (255 - 32) >> 4);
     QCOMPARE(qGreen(pixel) >> 4, (255 - 64) >> 4);
     QCOMPARE(qBlue(pixel) >> 4, (255 - 96) >> 4);
-}
-
-void tst_QImage::exifOrientation_data()
-{
-    QTest::addColumn<QString>("fileName");
-    QTest::newRow("Orientation 1, Intel format") << m_prefix + "jpeg_exif_orientation_value_1.jpg";
-    QTest::newRow("Orientation 2, Intel format") << m_prefix + "jpeg_exif_orientation_value_2.jpg";
-    QTest::newRow("Orientation 3, Intel format") << m_prefix + "jpeg_exif_orientation_value_3.jpg";
-    QTest::newRow("Orientation 4, Intel format") << m_prefix + "jpeg_exif_orientation_value_4.jpg";
-    QTest::newRow("Orientation 5, Intel format") << m_prefix + "jpeg_exif_orientation_value_5.jpg";
-    QTest::newRow("Orientation 6, Intel format") << m_prefix + "jpeg_exif_orientation_value_6.jpg";
-    QTest::newRow("Orientation 6, Motorola format") << m_prefix + "jpeg_exif_orientation_value_6_motorola.jpg";
-    QTest::newRow("Orientation 7, Intel format") << m_prefix + "jpeg_exif_orientation_value_7.jpg";
-    QTest::newRow("Orientation 8, Intel format") << m_prefix + "jpeg_exif_orientation_value_8.jpg";
-}
-
-void tst_QImage::exifOrientation()
-{
-    QFETCH(QString, fileName);
-
-    QImage img;
-    QRgb px;
-
-    QVERIFY(img.load(fileName));
-
-    px = img.pixel(0, 0);
-    QVERIFY(qRed(px) > 250 && qGreen(px) < 5 && qBlue(px) < 5);
-
-    px = img.pixel(img.width() - 1, 0);
-    QVERIFY(qRed(px) < 5 && qGreen(px) < 5 && qBlue(px) > 250);
 }
 
 static void cleanupFunction(void* info)

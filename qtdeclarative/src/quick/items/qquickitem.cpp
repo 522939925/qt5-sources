@@ -1756,11 +1756,9 @@ void QQuickItemPrivate::updateSubFocusItem(QQuickItem *scope, bool focus)
     QQmlProperty(), or QMetaProperty::write() when you need to modify those
     properties from C++. This ensures that the QML engine knows about the
     property change. Otherwise, the engine won't be able to carry out your
-    requested animation. For example, if you call \l setPosition() directly,
-    any behavior that reacts to changes in the x or y properties will not take
-    effect, as you are bypassing Qt's meta-object system. Note that these
-    functions incur a slight performance penalty. For more details, see
-    \l {Accessing Members of a QML Object Type from C++}.
+    requested animation.
+    Note that these functions incur a slight performance penalty. For more
+    details, see \l {Accessing Members of a QML Object Type from C++}.
 
     \sa QQuickWindow, QQuickPaintedItem
 */
@@ -2529,13 +2527,12 @@ void QQuickItem::setParentItem(QQuickItem *parentItem)
         QQuickWindowPrivate::get(d->window)->parentlessItems.remove(this);
     }
 
-    QQuickWindow *oldParentWindow = oldParentItem ? QQuickItemPrivate::get(oldParentItem)->window : 0;
     QQuickWindow *parentWindow = parentItem ? QQuickItemPrivate::get(parentItem)->window : 0;
-    if (oldParentWindow == parentWindow) {
+    if (d->window == parentWindow) {
         // Avoid freeing and reallocating resources if the window stays the same.
         d->parentItem = parentItem;
     } else {
-        if (oldParentWindow)
+        if (d->window)
             d->derefWindow();
         d->parentItem = parentItem;
         if (parentWindow)
@@ -5059,7 +5056,7 @@ void QQuickItem::setZ(qreal v)
   \endqml
   \endtable
 
-  \sa transform, Rotation
+  \sa Transform, Rotation
 */
 /*!
   \property QQuickItem::rotation
@@ -5085,7 +5082,7 @@ void QQuickItem::setZ(qreal v)
   \endqml
   \endtable
 
-  \sa transform, Rotation
+  \sa Transform, Rotation
   */
 qreal QQuickItem::rotation() const
 {
@@ -5145,7 +5142,7 @@ void QQuickItem::setRotation(qreal r)
   \endqml
   \endtable
 
-  \sa transform, Scale
+  \sa Transform, Scale
 */
 /*!
   \property QQuickItem::scale
@@ -5184,7 +5181,7 @@ void QQuickItem::setRotation(qreal r)
   \endqml
   \endtable
 
-  \sa transform, Scale
+  \sa Transform, Scale
   */
 qreal QQuickItem::scale() const
 {
@@ -6374,7 +6371,7 @@ void QQuickItem::setSize(const QSizeF &size)
     d->heightValid = true;
     d->widthValid = true;
 
-    if (QSizeF(d->width, d->height) == size)
+    if (d->width == size.width() && d->height == size.height())
         return;
 
     qreal oldHeight = d->height;

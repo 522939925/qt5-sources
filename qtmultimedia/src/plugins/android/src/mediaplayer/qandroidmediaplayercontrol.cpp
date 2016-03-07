@@ -307,7 +307,7 @@ void QAndroidMediaPlayerControl::setMedia(const QMediaContent &mediaContent,
 {
     StateChangeNotifier notifier(this);
 
-    mReloadingMedia = (mMediaContent == mediaContent);
+    mReloadingMedia = (mMediaContent == mediaContent) && !mPendingSetMedia;
 
     if (!mReloadingMedia) {
         mMediaContent = mediaContent;
@@ -337,7 +337,7 @@ void QAndroidMediaPlayerControl::setMedia(const QMediaContent &mediaContent,
             if (!mTempFile.isNull())
                 mediaPath = QStringLiteral("file://") + mTempFile->fileName();
         } else {
-            mediaPath = url.toString();
+            mediaPath = url.toString(QUrl::FullyEncoded);
         }
 
         if (mVideoSize.isValid() && mVideoOutput)
@@ -712,8 +712,8 @@ void QAndroidMediaPlayerControl::resetBufferingProgress()
 void QAndroidMediaPlayerControl::flushPendingStates()
 {
     if (mPendingSetMedia) {
-        mPendingSetMedia = false;
         setMedia(mMediaContent, 0);
+        mPendingSetMedia = false;
         return;
     }
 

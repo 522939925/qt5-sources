@@ -91,15 +91,16 @@ QVideoSurfaceGenericPainter::QVideoSurfaceGenericPainter()
     : m_imageFormat(QImage::Format_Invalid)
     , m_scanLineDirection(QVideoSurfaceFormat::TopToBottom)
 {
-    m_imagePixelFormats
-        << QVideoFrame::Format_RGB32
-        << QVideoFrame::Format_ARGB32
-        << QVideoFrame::Format_RGB565;
+    m_imagePixelFormats << QVideoFrame::Format_RGB32;
+
     // The raster formats should be a subset of the GL formats.
 #ifndef QT_NO_OPENGL
     if (QOpenGLContext::openGLModuleType() != QOpenGLContext::LibGLES)
 #endif
         m_imagePixelFormats << QVideoFrame::Format_RGB24;
+
+     m_imagePixelFormats << QVideoFrame::Format_ARGB32
+                         << QVideoFrame::Format_RGB565;
 }
 
 QList<QVideoFrame::PixelFormat> QVideoSurfaceGenericPainter::supportedPixelFormats(
@@ -141,8 +142,8 @@ QAbstractVideoSurface::Error QVideoSurfaceGenericPainter::start(const QVideoSurf
         bool ok = m_imageFormat != QImage::Format_Invalid && !m_imageSize.isEmpty();
 #ifndef QT_NO_OPENGL
         if (QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGLES)
-#endif
             ok &= format.pixelFormat() != QVideoFrame::Format_RGB24;
+#endif
         if (ok)
             return QAbstractVideoSurface::NoError;
     } else if (t == QAbstractVideoBuffer::QPixmapHandle) {
@@ -1055,7 +1056,13 @@ QVideoSurfaceGlslPainter::QVideoSurfaceGlslPainter(QGLContext *context)
     m_imagePixelFormats
             << QVideoFrame::Format_RGB32
             << QVideoFrame::Format_BGR32
-            << QVideoFrame::Format_ARGB32
+            << QVideoFrame::Format_ARGB32;
+    if (!context->contextHandle()->isOpenGLES()) {
+        m_imagePixelFormats
+            << QVideoFrame::Format_RGB24
+            << QVideoFrame::Format_BGR24;
+    }
+    m_imagePixelFormats
             << QVideoFrame::Format_RGB565
             << QVideoFrame::Format_YUV444
             << QVideoFrame::Format_AYUV444
@@ -1064,11 +1071,6 @@ QVideoSurfaceGlslPainter::QVideoSurfaceGlslPainter(QGLContext *context)
     m_glPixelFormats
             << QVideoFrame::Format_RGB32
             << QVideoFrame::Format_ARGB32;
-    if (!context->contextHandle()->isOpenGLES()) {
-        m_imagePixelFormats
-            << QVideoFrame::Format_RGB24
-            << QVideoFrame::Format_BGR24;
-    }
 }
 
 QAbstractVideoSurface::Error QVideoSurfaceGlslPainter::start(const QVideoSurfaceFormat &format)

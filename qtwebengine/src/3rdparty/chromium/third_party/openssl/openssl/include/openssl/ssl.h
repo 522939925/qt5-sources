@@ -602,7 +602,7 @@ struct ssl_session_st
 #define SSL_OP_SINGLE_DH_USE				0x00100000L
 /* Set to always use the tmp_rsa key when doing RSA operations,
  * even when this violates protocol specs */
-#define SSL_OP_EPHEMERAL_RSA				0x00200000L
+#define SSL_OP_EPHEMERAL_RSA				0x0
 /* Set on servers to choose the cipher according to the server's
  * preferences */
 #define SSL_OP_CIPHER_SERVER_PREFERENCE			0x00400000L
@@ -2663,6 +2663,7 @@ void ERR_load_SSL_strings(void);
 #define SSL_R_UNSUPPORTED_SSL_VERSION			 259
 #define SSL_R_UNSUPPORTED_STATUS_TYPE			 329
 #define SSL_R_USE_SRTP_NOT_NEGOTIATED			 369
+#define SSL_R_WEAK_DH_GROUP				 394
 #define SSL_R_WRITE_BIO_NOT_SET				 260
 #define SSL_R_WRONG_CIPHER_RETURNED			 261
 #define SSL_R_WRONG_MESSAGE_TYPE			 262

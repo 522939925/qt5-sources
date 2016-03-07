@@ -1570,6 +1570,13 @@ int ssl3_get_key_exchange(SSL *s)
 #ifndef OPENSSL_NO_RSA
 	if (alg_k & SSL_kRSA)
 		{
+               /* Temporary RSA keys only allowed in export ciphersuites */
+               if (!SSL_C_IS_EXPORT(s->s3->tmp.new_cipher))
+                       {
+                       al=SSL_AD_UNEXPECTED_MESSAGE;
+                       SSLerr(SSL_F_SSL3_GET_SERVER_CERTIFICATE,SSL_R_UNEXPECTED_MESSAGE);
+                       goto f_err;
+                       }
 		if ((rsa=RSA_new()) == NULL)
 			{
 			SSLerr(SSL_F_SSL3_GET_KEY_EXCHANGE,ERR_R_MALLOC_FAILURE);
@@ -3338,6 +3345,12 @@ int ssl3_check_cert_and_algorithm(SSL *s)
 	else if ((alg_k & SSL_kDHr) && !has_bits(i,EVP_PK_DH|EVP_PKS_RSA))
 		{
 		SSLerr(SSL_F_SSL3_CHECK_CERT_AND_ALGORITHM,SSL_R_MISSING_DH_RSA_CERT);
+		goto f_err;
+		}
+        else if ((alg_k & (SSL_kEDH|SSL_kDHr|SSL_kDHd)) &&
+		(dh == NULL || DH_size(dh)*8 < 1024))
+		{
+		SSLerr(SSL_F_SSL3_CHECK_CERT_AND_ALGORITHM,SSL_R_WEAK_DH_GROUP);
 		goto f_err;
 		}
 #ifndef OPENSSL_NO_DSA

@@ -88,8 +88,6 @@ QWaylandWindow::QWaylandWindow(QWindow *window)
     , mResizeDirty(false)
     , mResizeAfterSwap(qEnvironmentVariableIsSet("QT_WAYLAND_RESIZE_AFTER_SWAP"))
     , mSentInitialResize(false)
-    , mMouseDevice(0)
-    , mMouseSerial(0)
     , mState(Qt::WindowNoState)
     , mBackingStore(Q_NULLPTR)
 {
@@ -109,10 +107,24 @@ QWaylandWindow::QWaylandWindow(QWindow *window)
         // Set initial surface title
         mShellSurface->setTitle(window->title());
 
-        // Set surface class to the .desktop file name (obtained from executable name)
-        QFileInfo exeFileInfo(qApp->applicationFilePath());
-        QString className = exeFileInfo.baseName() + QLatin1String(".desktop");
-        mShellSurface->setAppId(className);
+        // The appId is the desktop entry identifier that should follow the
+        // reverse DNS convention (see http://standards.freedesktop.org/desktop-entry-spec/latest/ar01s02.html),
+        // use the application domain if available, otherwise the executable base name.
+        // According to xdg-shell the appId is only the name, without the .desktop suffix.
+        QFileInfo fi = QCoreApplication::instance()->applicationFilePath();
+        QStringList domainName =
+            QCoreApplication::instance()->organizationDomain().split(QLatin1Char('.'),
+                                                                     QString::SkipEmptyParts);
+
+        if (domainName.isEmpty()) {
+            mShellSurface->setAppId(fi.baseName());
+        } else {
+            QString appId;
+            for (int i = 0; i < domainName.count(); ++i)
+                appId.prepend(QLatin1Char('.')).prepend(domainName.at(i));
+            appId.append(fi.baseName());
+            mShellSurface->setAppId(appId);
+        }
     }
 
     if (QPlatformWindow::parent() && mSubSurfaceWindow) {
@@ -208,7 +220,7 @@ void QWaylandWindow::setGeometry(const QRect &rect)
 {
     setGeometry_helper(rect);
 
-    if (window()->isVisible()) {
+    if (window()->isVisible() && rect.isValid()) {
         if (mWindowDecoration)
             mWindowDecoration->update();
 
@@ -226,14 +238,17 @@ void QWaylandWindow::setGeometry(const QRect &rect)
 void QWaylandWindow::setVisible(bool visible)
 {
     if (visible) {
-        if (window()->type() == Qt::Popup && transientParent()) {
+        if (window()->type() == Qt::Popup) {
             QWaylandWindow *parent = transientParent();
-            mMouseDevice = parent->mMouseDevice;
-            mMouseSerial = parent->mMouseSerial;
-
-            QWaylandWlShellSurface *wlshellSurface = dynamic_cast<QWaylandWlShellSurface*>(mShellSurface);
-            if (mMouseDevice && wlshellSurface) {
-                wlshellSurface->setPopup(transientParent(), mMouseDevice, mMouseSerial);
+            if (!parent) {
+                // Try with the current focus window. It should be the right one and anyway
+                // better than having no parent at all.
+                parent = mDisplay->lastInputWindow();
+            }
+            if (parent) {
+                QWaylandWlShellSurface *wlshellSurface = qobject_cast<QWaylandWlShellSurface*>(mShellSurface);
+                if (wlshellSurface)
+                    wlshellSurface->setPopup(parent, mDisplay->lastInputDevice(), mDisplay->lastInputSerial());
             }
         }
 
@@ -336,7 +351,7 @@ void QWaylandWindow::requestResize()
 {
     QMutexLocker lock(&mResizeLock);
 
-    if (mCanResize) {
+    if (mCanResize || !mSentInitialResize) {
         doResize();
     }
 
@@ -480,7 +495,7 @@ bool QWaylandWindow::createDecoration()
 {
     // so far only xdg-shell support this "unminimize" trick, may be moved elsewhere
     if (mState == Qt::WindowMinimized) {
-        QWaylandXdgSurface *xdgSurface = dynamic_cast<QWaylandXdgSurface *>(mShellSurface);
+        QWaylandXdgSurface *xdgSurface = qobject_cast<QWaylandXdgSurface *>(mShellSurface);
         if ( xdgSurface ) {
             if (xdgSurface->isFullscreen()) {
                 setWindowStateInternal(Qt::WindowFullScreen);
@@ -572,7 +587,7 @@ QWaylandWindow *QWaylandWindow::transientParent() const
     if (window()->transientParent()) {
         // Take the top level window here, since the transient parent may be a QWidgetWindow
         // or some other window without a shell surface, which is then not able to get mouse
-        // events, nor set mMouseSerial and mMouseDevice.
+        // events.
         return static_cast<QWaylandWindow *>(topLevelWindow(window()->transientParent())->handle());
     }
     return 0;
@@ -580,10 +595,6 @@ QWaylandWindow *QWaylandWindow::transientParent() const
 
 void QWaylandWindow::handleMouse(QWaylandInputDevice *inputDevice, ulong timestamp, const QPointF &local, const QPointF &global, Qt::MouseButtons b, Qt::KeyboardModifiers mods)
 {
-    if (b != Qt::NoButton) {
-        mMouseSerial = inputDevice->serial();
-        mMouseDevice = inputDevice;
-    }
 
     if (mWindowDecoration) {
         handleMouseEventWithDecoration(inputDevice, timestamp,local,global,b,mods);
@@ -622,7 +633,8 @@ bool QWaylandWindow::touchDragDecoration(QWaylandInputDevice *inputDevice, const
 
 void QWaylandWindow::handleMouseEventWithDecoration(QWaylandInputDevice *inputDevice, ulong timestamp, const QPointF &local, const QPointF &global, Qt::MouseButtons b, Qt::KeyboardModifiers mods)
 {
-    if (mWindowDecoration->handleMouse(inputDevice,local,global,b,mods))
+    if (mMousePressedInContentArea == Qt::NoButton &&
+        mWindowDecoration->handleMouse(inputDevice,local,global,b,mods))
         return;
 
     QMargins marg = frameMargins();

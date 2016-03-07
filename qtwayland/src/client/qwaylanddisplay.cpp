@@ -128,6 +128,9 @@ QWaylandDisplay::QWaylandDisplay(QWaylandIntegration *waylandIntegration)
     , mQtKeyExtension(0)
     , mTextInputManager(0)
     , mHardwareIntegration(0)
+    , mLastInputSerial(0)
+    , mLastInputDevice(0)
+    , mLastInputWindow(0)
 {
     qRegisterMetaType<uint32_t>("uint32_t");
 
@@ -335,8 +338,15 @@ void QWaylandDisplay::forceRoundTrip()
     wl_proxy_set_queue((struct wl_proxy *)callback, mEventQueue);
     wl_callback_add_listener(callback, &sync_listener, &done);
     flushRequests();
-    while (!done && ret >= 0)
-        ret = wl_display_dispatch_queue(mDisplay, mEventQueue);
+    if (QThread::currentThread()->eventDispatcher()) {
+        while (!done && ret >= 0) {
+            QThread::currentThread()->eventDispatcher()->processEvents(QEventLoop::WaitForMoreEvents);
+            ret = wl_display_dispatch_queue_pending(mDisplay, mEventQueue);
+        }
+    } else {
+        while (!done && ret >= 0)
+            ret = wl_display_dispatch_queue(mDisplay, mEventQueue);
+    }
 
     if (ret == -1 && !done)
         wl_callback_destroy(callback);
@@ -357,6 +367,13 @@ bool QWaylandDisplay::supportsWindowDecoration() const
 
     static bool integrationSupport = clientBufferIntegration() && clientBufferIntegration()->supportsWindowDecoration();
     return integrationSupport;
+}
+
+void QWaylandDisplay::setLastInputDevice(QWaylandInputDevice *device, uint32_t serial, QWaylandWindow *win)
+{
+    mLastInputDevice = device;
+    mLastInputSerial = serial;
+    mLastInputWindow = win;
 }
 
 QT_END_NAMESPACE
