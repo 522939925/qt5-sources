@@ -110,7 +110,6 @@ QSerialPortPrivate::QSerialPortPrivate()
     , startAsyncWriteTimer(0)
     , originalEventMask(0)
     , triggeredEventMask(0)
-    , actualBytesToWrite(0)
 #elif defined(Q_OS_UNIX)
     , descriptor(-1)
     , readNotifier(0)
@@ -158,6 +157,8 @@ void QSerialPortPrivate::setError(const QSerialPortErrorInfo &errorInfo)
     \note The serial port is always opened with exclusive access
     (that is, no other process or thread can access an already opened serial port).
 
+    Use the close() method to close the port and cancel the I/O operations.
+
     Having successfully opened, QSerialPort tries to determine the current
     configuration of the port and initializes itself. You can reconfigure the
     port to the desired setting using the setBaudRate(), setDataBits(),
@@ -176,7 +177,19 @@ void QSerialPortPrivate::setError(const QSerialPortErrorInfo &errorInfo)
     QSerialPort's internal read buffer. You can limit the size of the read
     buffer using setReadBufferSize().
 
-    Use the close() method to close the port and cancel the I/O operations.
+    QSerialPort provides a set of functions that suspend the
+    calling thread until certain signals are emitted. These functions
+    can be used to implement blocking serial ports:
+
+    \list
+
+    \li waitForReadyRead() blocks calls until new data is available for
+    reading.
+
+    \li waitForBytesWritten() blocks calls until one payload of data has
+    been written to the serial port.
+
+    \endlist
 
     See the following example:
 
@@ -515,10 +528,6 @@ void QSerialPort::setPort(const QSerialPortInfo &serialPortInfo)
         \li Removes the prefix "\\\\.\\" or "//./" from the system location
            and returns the remainder of the string.
     \row
-        \li Windows CE
-        \li Removes the suffix ":" from the system location
-           and returns the remainder of the string.
-    \row
         \li Unix, BSD
         \li Removes the prefix "/dev/" from the system location
            and returns the remainder of the string.
@@ -567,15 +576,6 @@ bool QSerialPort::open(OpenMode mode)
     clearError();
     if (!d->open(mode))
         return false;
-
-    if (!d->setBaudRate()
-        || !d->setDataBits(d->dataBits)
-        || !d->setParity(d->parity)
-        || !d->setStopBits(d->stopBits)
-        || !d->setFlowControl(d->flowControl)) {
-        d->close();
-        return false;
-    }
 
     QIODevice::open(mode);
     return true;
@@ -659,9 +659,9 @@ bool QSerialPort::settingsRestoredOnClose() const
     after that the opening of the port succeeds.
 
     \warning Setting the AllDirections flag is supported on all platforms.
-    Windows and Windows CE support only this mode.
+    Windows supports only this mode.
 
-    \warning Returns equal baud rate in any direction on Windows, Windows CE.
+    \warning Returns equal baud rate in any direction on Windows.
 
     The default value is Baud9600, i.e. 9600 bits per second.
 */
@@ -1262,13 +1262,7 @@ qint64 QSerialPort::bytesAvailable() const
 qint64 QSerialPort::bytesToWrite() const
 {
     Q_D(const QSerialPort);
-    qint64 bytes = QIODevice::bytesToWrite();
-#ifdef Q_OS_WIN32
-    bytes += d->actualBytesToWrite;
-#else
-    bytes += d->writeBuffer.size();
-#endif
-    return bytes;
+    return QIODevice::bytesToWrite() + d->writeBuffer.size();
 }
 
 /*!

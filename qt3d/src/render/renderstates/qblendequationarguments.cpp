@@ -50,7 +50,8 @@ namespace Qt3DRender {
     \class Qt3DRender::QBlendEquationArguments
     \inmodule Qt3DRender
     \since 5.5
-    \brief Encapsulates blending information.
+    \brief Encapsulates blending information: specifies how the incoming values (what's going to be drawn)
+    are going to affect the existing values (what is already drawn).
 
     OpenGL pre-3.0:     Set the same blend state for all draw buffers
                         (one QBlendEquationArguments)
@@ -67,7 +68,8 @@ namespace Qt3DRender {
     \inherits RenderState
     \inqmlmodule Qt3D.Render
     \since 5.5
-    \brief Encapsulates blending information.
+    \brief Encapsulates blending information: specifies how the incoming values (what's going to be drawn)
+    are going to affect the existing values (what is already drawn).
 
     OpenGL pre-3.0:     Set the same blend state for all draw buffers
     OpenGL 3.0-pre4.0:  Set the same blend state for all draw buffers,
@@ -101,34 +103,34 @@ QBlendEquationArguments::QBlendEquationArguments(QBlendEquationArgumentsPrivate 
 /*!
   \enum Qt3DRender::QBlendEquationArguments::Blending
 
-  \value Zero 0
-  \value One 1
-  \value SrcColor 0x0300
-  \value SourceAlpha 0x0302
-  \value Src1Alpha
-  \value Src1Color
-  \value DstColor 0x0306
-  \value destinationAlpha 0x0304
-  \value SourceAlphaSaturate 0x0308
-  \value ConstantColor 0x8001
-  \value ConstantAlpha 0x8003
-  \value OneMinusSrcColor 0x0301
-  \value OneMinusSourceAlpha 0x0303
-  \value OneMinusdestinationAlpha 0x0305
-  \value OneMinusDstColor 0x0307
-  \value OneMinusConstantColor 0x8002
-  \value OneMinusConstantAlpha 0x8004
-  \value OneMinusSrc1Alpha
-  \value OneMinusSrc1Color0
+  \value Zero GL_ZERO
+  \value One GL_ONE
+  \value SourceColor GL_SRC_COLOR
+  \value SourceAlpha GL_SRC_ALPHA
+  \value Source1Alpha GL_SRC1_ALPHA
+  \value Source1Color GL_SRC1_COLOR
+  \value DestinationColor GL_DST_COLOR
+  \value DestinationAlpha GL_DST_ALPHA
+  \value SourceAlphaSaturate GL_SRC_ALPHA_SATURATE
+  \value ConstantColor 0GL_CONSTANT_COLOR
+  \value ConstantAlpha GL_CONSTANT_ALPHA
+  \value OneMinusSourceColor GL_ONE_MINUS_SRC_COLOR
+  \value OneMinusSourceAlpha GL_ONE_MINUS_SRC_ALPHA
+  \value OneMinusDestinationAlpha GL_ONE_MINUS_DST_ALPHA
+  \value OneMinusDestinationColor GL_ONE_MINUS_DST_COLOR
+  \value OneMinusConstantColor GL_ONE_MINUS_CONSTANT_COLOR
+  \value OneMinusConstantAlpha GL_ONE_MINUS_CONSTANT_ALPHA
+  \value OneMinusSource1Alpha GL_ONE_MINUS_SRC1_ALPHA
+  \value OneMinusSource1Color0 GL_ONE_MINUS_SRC1_COLOR
 */
 
 /*!
-    \qmlproperty enumeration Qt3D.Render::BlendEquationArguments::sourceRgb
+    \qmlproperty enumeration BlendEquationArguments::sourceRgb
 
  */
 
 /*!
-    \property Qt3DRender::QBlendEquationArguments::sourceRgb
+    \property QBlendEquationArguments::sourceRgb
 
  */
 QBlendEquationArguments::Blending QBlendEquationArguments::sourceRgb() const
@@ -150,12 +152,12 @@ void QBlendEquationArguments::setSourceRgb(QBlendEquationArguments::Blending sou
 }
 
 /*!
-    \qmlproperty enumeration Qt3D.Render::BlendEquationArguments::destinationRgb
+    \qmlproperty enumeration BlendEquationArguments::destinationRgb
 
  */
 
 /*!
-    \property Qt3DRender::QBlendEquationArguments::destinationRgb
+    \property QBlendEquationArguments::destinationRgb
 
  */
 QBlendEquationArguments::Blending QBlendEquationArguments::destinationRgb() const
@@ -177,12 +179,12 @@ void QBlendEquationArguments::setDestinationRgb(QBlendEquationArguments::Blendin
 }
 
 /*!
-    \qmlproperty enumeration Qt3D.Render::BlendEquationArguments::sourceAlpha
+    \qmlproperty enumeration BlendEquationArguments::sourceAlpha
 
  */
 
 /*!
-    \property Qt3DRender::QBlendEquationArguments::sourceAlpha
+    \property QBlendEquationArguments::sourceAlpha
 
  */
 QBlendEquationArguments::Blending QBlendEquationArguments::sourceAlpha() const
@@ -204,12 +206,12 @@ void QBlendEquationArguments::setSourceAlpha(QBlendEquationArguments::Blending s
 }
 
 /*!
-    \qmlproperty enumeration Qt3D.Render::BlendEquationArguments::DestinationAlpha
+    \qmlproperty enumeration BlendEquationArguments::DestinationAlpha
 
  */
 
 /*!
-    \property Qt3DRender::QBlendEquationArguments::destinationAlpha
+    \property QBlendEquationArguments::destinationAlpha
 
  */
 QBlendEquationArguments::Blending QBlendEquationArguments::destinationAlpha() const
@@ -230,12 +232,30 @@ void QBlendEquationArguments::setDestinationAlpha(QBlendEquationArguments::Blend
     }
 }
 
+/*!
+    \fn QBlendEquationArguments::sourceRgbaChanged(Blending sourceRgba)
+
+    Notify that both sourceRgb and sourceAlpha properties have changed to \a sourceRgba.
+*/
+/*!
+    \fn QBlendEquationArguments::destinationRgbaChanged(Blending destinationRgba)
+
+    Notify that both destinationRgb and destinationAlpha properties have changed to
+    \a destinationRgba.
+*/
+
+/*!
+    Change both sourceRgb and sourceAlpha properties to \a sourceRgba.
+*/
 void QBlendEquationArguments::setSourceRgba(Blending sourceRgba)
 {
     setSourceRgb(sourceRgba);
     setSourceAlpha(sourceRgba);
 }
 
+/*!
+    Change both destinationRgb and destinationAlpha properties to \a destinationRgba.
+*/
 void QBlendEquationArguments::setDestinationRgba(Blending destinationRgba)
 {
     setDestinationRgb(destinationRgba);
@@ -243,14 +263,14 @@ void QBlendEquationArguments::setDestinationRgba(Blending destinationRgba)
 }
 
 /*!
-    \qmlproperty int Qt3D.Render::BlendEquationArguments::bufferIndex
+    \qmlproperty int BlendEquationArguments::bufferIndex
 
     Specifies the index of the Draw Buffer that this BlendEquationArguments applies to.
     If negative, this will apply to all Draw Buffers.
  */
 
 /*!
-    \property Qt3DRender::QBlendEquationArguments::bufferIndex
+    \property QBlendEquationArguments::bufferIndex
 
     Specifies the index of the Draw Buffer that this BlendEquationArguments applies to.
     If negative, this will apply to all Draw Buffers.

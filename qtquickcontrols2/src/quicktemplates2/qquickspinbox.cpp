@@ -612,7 +612,7 @@ void QQuickSpinBox::keyReleaseEvent(QKeyEvent *event)
     Q_D(QQuickSpinBox);
     QQuickControl::keyReleaseEvent(event);
 
-    if (event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return)
+    if (d->editable && (event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return))
         d->updateValue();
 
     d->up->setPressed(false);
@@ -704,7 +704,7 @@ void QQuickSpinBox::itemChange(ItemChange change, const ItemChangeData &value)
 {
     Q_D(QQuickSpinBox);
     QQuickControl::itemChange(change, value);
-    if (change == ItemActiveFocusHasChanged && !value.boolValue)
+    if (d->editable && change == ItemActiveFocusHasChanged && !value.boolValue)
         d->updateValue();
 }
 
@@ -768,8 +768,14 @@ void QQuickSpinButton::setIndicator(QQuickItem *indicator)
     if (d->indicator == indicator)
         return;
 
-    delete d->indicator;
+    QQuickControl *control = qobject_cast<QQuickControl*>(d->parent);
+    if (control)
+        QQuickControlPrivate::get(control)->deleteDelegate(d->indicator);
+    else
+        delete d->indicator;
+
     d->indicator = indicator;
+
     if (indicator) {
         if (!indicator->parentItem())
             indicator->setParentItem(static_cast<QQuickItem *>(parent()));

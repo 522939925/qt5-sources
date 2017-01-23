@@ -86,8 +86,10 @@
 #include "web_engine_library_info.h"
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QOffscreenSurface>
 #include <QOpenGLContext>
 #include <QStringList>
+#include <QSurfaceFormat>
 #include <QVector>
 #include <qpa/qplatformnativeinterface.h>
 
@@ -100,6 +102,7 @@ QT_END_NAMESPACE
 namespace {
 
 scoped_refptr<QtWebEngineCore::WebEngineContext> sContext;
+static bool s_destroyed = false;
 
 void destroyContext()
 {
@@ -108,6 +111,7 @@ void destroyContext()
     // WebEngineContext's pointer is used.
     sContext->destroy();
     sContext = 0;
+    s_destroyed = true;
 }
 
 bool usingANGLE()
@@ -182,18 +186,29 @@ void WebEngineContext::destroy()
     // RenderProcessHostImpl should be destroyed before WebEngineContext since
     // default BrowserContext might be used by the RenderprocessHostImpl's destructor.
     m_browserRunner.reset(0);
+
+    // Drop the false reference.
+    sContext->Release();
 }
 
 WebEngineContext::~WebEngineContext()
 {
+    // WebEngineContext::destroy() must be called before we are deleted
+    Q_ASSERT(!m_globalQObject);
+    Q_ASSERT(!m_devtools);
+    Q_ASSERT(!m_browserRunner);
 }
 
 scoped_refptr<WebEngineContext> WebEngineContext::current()
 {
+    if (s_destroyed)
+        return nullptr;
     if (!sContext.get()) {
         sContext = new WebEngineContext();
         // Make sure that we ramp down Chromium before QApplication destroys its X connection, etc.
         qAddPostRoutine(destroyContext);
+        // Add a false reference so there is no race between unreferencing sContext and a global QApplication.
+        sContext->AddRef();
     }
     return sContext;
 }
@@ -281,8 +296,10 @@ WebEngineContext::WebEngineContext()
 
     if (useEmbeddedSwitches) {
         // Inspired by the Android port's default switches
-        parsedCommandLine->AppendSwitch(switches::kEnableOverlayScrollbar);
-        parsedCommandLine->AppendSwitch(switches::kEnablePinch);
+        if (!parsedCommandLine->HasSwitch(switches::kDisableOverlayScrollbar))
+            parsedCommandLine->AppendSwitch(switches::kEnableOverlayScrollbar);
+        if (!parsedCommandLine->HasSwitch(switches::kDisablePinch))
+            parsedCommandLine->AppendSwitch(switches::kEnablePinch);
         parsedCommandLine->AppendSwitch(switches::kEnableViewport);
         parsedCommandLine->AppendSwitch(switches::kMainFrameResizesAreOrientationChanges);
         parsedCommandLine->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
@@ -294,31 +311,57 @@ WebEngineContext::WebEngineContext()
 
     GLContextHelper::initialize();
 
-    if (usingANGLE() || usingSoftwareDynamicGL() || usingQtQuick2DRenderer()) {
-        parsedCommandLine->AppendSwitch(switches::kDisableGpu);
-    } else {
-        const char *glType = 0;
-        if (qt_gl_global_share_context()) {
-            if (qt_gl_global_share_context()->isOpenGLES()) {
-                glType = gfx::kGLImplementationEGLName;
+    const char *glType = 0;
+    if (!usingANGLE() && !usingSoftwareDynamicGL() && !usingQtQuick2DRenderer()) {
+        if (qt_gl_global_share_context() && qt_gl_global_share_context()->isValid()) {
+            // If the native handle is QEGLNativeContext try to use GL ES/2, if there is no native handle
+            // assume we are using wayland and try GL ES/2, and finally Ozone demands GL ES/2 too.
+            if (qt_gl_global_share_context()->nativeHandle().isNull()
+#ifdef USE_OZONE
+                || true
+#endif
+                || !strcmp(qt_gl_global_share_context()->nativeHandle().typeName(), "QEGLNativeContext"))
+            {
+                if (qt_gl_global_share_context()->isOpenGLES()) {
+                    glType = gfx::kGLImplementationEGLName;
+                } else {
+                    QOpenGLContext context;
+                    QSurfaceFormat format;
+
+                    format.setRenderableType(QSurfaceFormat::OpenGLES);
+                    format.setVersion(2, 0);
+
+                    context.setFormat(format);
+                    context.setShareContext(qt_gl_global_share_context());
+                    if (context.create()) {
+                        QOffscreenSurface surface;
+
+                        surface.setFormat(format);
+                        surface.create();
+
+                        if (context.makeCurrent(&surface)) {
+                            if (context.hasExtension("GL_ARB_ES2_compatibility"))
+                                glType = gfx::kGLImplementationEGLName;
+
+                            context.doneCurrent();
+                        }
+
+                        surface.destroy();
+                    }
+                }
             } else {
-                glType = gfx::kGLImplementationDesktopName;
+                if (!qt_gl_global_share_context()->isOpenGLES())
+                    glType = gfx::kGLImplementationDesktopName;
             }
         } else {
-            qWarning("WebEngineContext used before QtWebEngine::initialize()");
-            // We have to assume the default OpenGL module type will be used.
-            switch (QOpenGLContext::openGLModuleType()) {
-            case QOpenGLContext::LibGL:
-                glType = gfx::kGLImplementationDesktopName;
-                break;
-            case QOpenGLContext::LibGLES:
-                glType = gfx::kGLImplementationEGLName;
-                break;
-            }
+            qWarning("WebEngineContext used before QtWebEngine::initialize() or OpenGL context creation failed.");
         }
-
-        parsedCommandLine->AppendSwitchASCII(switches::kUseGL, glType);
     }
+
+    if (glType)
+        parsedCommandLine->AppendSwitchASCII(switches::kUseGL, glType);
+    else
+        parsedCommandLine->AppendSwitch(switches::kDisableGpu);
 
     content::UtilityProcessHostImpl::RegisterUtilityMainThreadFactory(content::CreateInProcessUtilityThread);
     content::RenderProcessHostImpl::RegisterRendererMainThreadFactory(content::CreateInProcessRendererThread);

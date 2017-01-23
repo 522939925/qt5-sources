@@ -53,8 +53,6 @@
 
 QT_BEGIN_NAMESPACE
 
-class QQuickMaterialStylePrivate;
-
 class QQuickMaterialStyle : public QQuickStyleAttached
 {
     Q_OBJECT
@@ -98,11 +96,11 @@ class QQuickMaterialStyle : public QQuickStyleAttached
     Q_PROPERTY(QColor switchDisabledHandleColor READ switchDisabledHandleColor NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor scrollBarColor READ scrollBarColor NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor scrollBarPressedColor READ scrollBarPressedColor NOTIFY paletteChanged FINAL)
-    Q_PROPERTY(QColor drawerBackgroundColor READ drawerBackgroundColor NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor dialogColor READ dialogColor NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor backgroundDimColor READ backgroundDimColor NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor listHighlightColor READ listHighlightColor NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor tooltipColor READ tooltipColor NOTIFY paletteChanged FINAL)
+    Q_PROPERTY(QColor toolBarColor READ toolBarColor NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor toolTextColor READ toolTextColor NOTIFY paletteChanged FINAL)
     Q_PROPERTY(QColor spinBoxDisabledIconColor READ spinBoxDisabledIconColor NOTIFY paletteChanged FINAL)
 
@@ -226,11 +224,11 @@ public:
     QColor switchDisabledHandleColor() const;
     QColor scrollBarColor() const;
     QColor scrollBarPressedColor() const;
-    QColor drawerBackgroundColor() const;
     QColor dialogColor() const;
     QColor backgroundDimColor() const;
     QColor listHighlightColor() const;
     QColor tooltipColor() const;
+    QColor toolBarColor() const;
     QColor toolTextColor() const;
     QColor spinBoxDisabledIconColor() const;
 
@@ -259,17 +257,27 @@ private:
     QColor buttonColor(bool highlighted, bool pressed, bool hover) const;
     Shade themeShade() const;
 
+    // These reflect whether a color value was explicitly set on the specific
+    // item that this attached style object represents.
     bool m_explicitTheme;
     bool m_explicitPrimary;
     bool m_explicitAccent;
     bool m_explicitForeground;
     bool m_explicitBackground;
+    // These reflect whether the color value that was either inherited or
+    // explicitly set is in the form that QColor expects, rather than one of
+    // our pre-defined color enum values.
     bool m_customPrimary;
     bool m_customAccent;
     bool m_customForeground;
     bool m_customBackground;
+    // These will be true when this item has an explicit or inherited foreground/background
+    // color, or these colors were declared globally via settings (e.g. conf or env vars).
+    // Some color properties of the style will return different values depending on whether
+    // or not these are set.
     bool m_hasForeground;
     bool m_hasBackground;
+    // The actual values for this item, whether explicit, inherited or globally set.
     Theme m_theme;
     uint m_primary;
     uint m_accent;

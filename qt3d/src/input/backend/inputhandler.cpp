@@ -112,6 +112,12 @@ void InputHandler::registerEventFilters(QEventFilterService *service)
     service->registerEventFilter(m_mouseEventFilter, 513);
 }
 
+void InputHandler::unregisterEventFilters(Qt3DCore::QEventFilterService *service)
+{
+    service->unregisterEventFilter(m_keyboardEventFilter);
+    service->unregisterEventFilter(m_mouseEventFilter);
+}
+
 // Called by the keyboardEventFilter in the main thread
 void InputHandler::appendKeyEvent(const QT_PREPEND_NAMESPACE(QKeyEvent) &event)
 {
@@ -245,13 +251,20 @@ QVector<Qt3DCore::QAspectJobPtr> InputHandler::mouseJobs()
         controller->updateMouseEvents(mouseEvents);
         // Event dispacthing job
         if (!mouseEvents.isEmpty() || !wheelEvents.empty()) {
-            const QVector<Qt3DCore::QNodeId> mouseInputs = controller->mouseInputs();
-            for (QNodeId input : mouseInputs) {
-                MouseEventDispatcherJob *job = new MouseEventDispatcherJob(input,
-                                                                           mouseEvents,
-                                                                           wheelEvents);
-                job->setInputHandler(this);
-                jobs.append(QAspectJobPtr(job));
+            // Send the events to the mouse handlers that have for sourceDevice controller
+            const QVector<HMouseHandler> activeMouseHandlers = m_mouseInputManager->activeHandles();
+            for (HMouseHandler mouseHandlerHandle : activeMouseHandlers) {
+
+                MouseHandler *mouseHandler = m_mouseInputManager->data(mouseHandlerHandle);
+                Q_ASSERT(mouseHandler);
+
+                if (mouseHandler->mouseDevice() == controller->peerId()) {
+                    MouseEventDispatcherJob *job = new MouseEventDispatcherJob(mouseHandler->peerId(),
+                                                                               mouseEvents,
+                                                                               wheelEvents);
+                    job->setInputHandler(this);
+                    jobs.append(QAspectJobPtr(job));
+                }
             }
         }
     }
@@ -271,6 +284,8 @@ void InputHandler::addInputDeviceIntegration(QInputDeviceIntegration *inputInteg
 
 void InputHandler::setInputSettings(InputSettings *settings)
 {
+    if (m_settings && settings == nullptr)
+        m_eventSourceSetter->unsetEventSource(m_settings->eventSource());
     m_settings = settings;
 }
 
@@ -292,6 +307,16 @@ void InputHandler::updateEventSource()
         QObject *eventSource = m_settings->eventSource();
         m_eventSourceSetter->setEventSource(eventSource);
     }
+}
+
+AbstractActionInput *InputHandler::lookupActionInput(Qt3DCore::QNodeId id) const
+{
+    AbstractActionInput *input = nullptr;
+    if ((input = actionInputManager()->lookupResource(id)) != nullptr)
+        return input;
+    if ((input = inputSequenceManager()->lookupResource(id)) != nullptr)
+        return input;
+    return inputChordManager()->lookupResource(id); // nullptr if not found
 }
 
 } // namespace Input

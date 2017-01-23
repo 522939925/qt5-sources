@@ -2814,10 +2814,16 @@ static const QRgba64 *QT_FASTCALL fetchTransformedBilinear64(QRgba64 *buffer, co
                         sbuf2[i * 2 + 1] = ((const uint*)s2)[x2];
                         fx += fdx;
                     }
+                    int fastLen;
+                    if (fdx > 0)
+                        fastLen = qMin(len, int((image_x2 - (fx >> 16)) / data->m11));
+                    else
+                        fastLen = qMin(len, int((image_x1 - (fx >> 16)) / data->m11));
+                    fastLen -= 3;
 
                     const __m128i v_fdx = _mm_set1_epi32(fdx*4);
                     __m128i v_fx = _mm_setr_epi32(fx, fx + fdx, fx + fdx + fdx, fx + fdx + fdx + fdx);
-                    for (; i < len-3; i+=4) {
+                    for (; i < fastLen; i += 4) {
                         int offset = _mm_extract_epi16(v_fx, 1);
                         sbuf1[i * 2 + 0] = ((const uint*)s1)[offset];
                         sbuf1[i * 2 + 1] = ((const uint*)s1)[offset + 1];
@@ -5377,17 +5383,17 @@ static const ProcessSpans processTextureSpans[NBlendTypes][QImage::NImageFormats
         blend_src_generic, // ARGB32
         blend_transformed_argb, // ARGB32_Premultiplied
         blend_transformed_rgb565,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
+        blend_src_generic, // ARGB8565_Premultiplied
+        blend_src_generic, // RGB666
+        blend_src_generic, // ARGB6666_Premultiplied
+        blend_src_generic, // RGB555
+        blend_src_generic, // ARGB8555_Premultiplied
+        blend_src_generic, // RGB888
+        blend_src_generic, // RGB444
+        blend_src_generic, // ARGB4444_Premultiplied
+        blend_src_generic, // RGBX8888
+        blend_src_generic, // RGBA8888
+        blend_src_generic, // RGBA8888_Premultiplied
         blend_src_generic_rgb64,
         blend_src_generic_rgb64,
         blend_src_generic_rgb64,
@@ -5405,16 +5411,17 @@ static const ProcessSpans processTextureSpans[NBlendTypes][QImage::NImageFormats
         blend_src_generic, // ARGB32
         blend_transformed_tiled_argb, // ARGB32_Premultiplied
         blend_transformed_tiled_rgb565,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
+        blend_src_generic, // ARGB8565_Premultiplied
+        blend_src_generic, // RGB666
+        blend_src_generic, // ARGB6666_Premultiplied
+        blend_src_generic, // RGB555
+        blend_src_generic, // ARGB8555_Premultiplied
+        blend_src_generic, // RGB888
+        blend_src_generic, // RGB444
+        blend_src_generic, // ARGB4444_Premultiplied
+        blend_src_generic, // RGBX8888
+        blend_src_generic, // RGBA8888
+        blend_src_generic, // RGBA8888_Premultiplied
         blend_src_generic_rgb64,
         blend_src_generic_rgb64,
         blend_src_generic_rgb64,
@@ -5432,17 +5439,17 @@ static const ProcessSpans processTextureSpans[NBlendTypes][QImage::NImageFormats
         blend_src_generic, // ARGB32
         blend_src_generic, // ARGB32_Premultiplied
         blend_transformed_bilinear_rgb565,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
-        blend_src_generic,
+        blend_src_generic, // ARGB8565_Premultiplied
+        blend_src_generic, // RGB666
+        blend_src_generic, // ARGB6666_Premultiplied
+        blend_src_generic, // RGB555
+        blend_src_generic, // ARGB8555_Premultiplied
+        blend_src_generic, // RGB888
+        blend_src_generic, // RGB444
+        blend_src_generic, // ARGB4444_Premultiplied
+        blend_src_generic, // RGBX8888
+        blend_src_generic, // RGBA8888
+        blend_src_generic, // RGBA8888_Premultiplied
         blend_src_generic_rgb64,
         blend_src_generic_rgb64,
         blend_src_generic_rgb64,
@@ -5630,15 +5637,16 @@ static void qt_gradient_quint16(int count, const QSpan *spans, void *userData)
         int yinc = int((linear.dy * data->m22 * gss) * FIXPT_SIZE);
         int off = int((((linear.dy * (data->m22 * qreal(0.5) + data->dy) + linear.off) * gss) * FIXPT_SIZE));
 
-        QRgba64 oldColor = data->solid.color;
+        // Save the fillData since we overwrite it when setting solid.color.
+        QGradientData gradient = data->gradient;
         while (count--) {
             int y = spans->y;
 
-            data->solid.color = QRgba64::fromArgb32(qt_gradient_pixel_fixed(&data->gradient, yinc * y + off));
+            data->solid.color = QRgba64::fromArgb32(qt_gradient_pixel_fixed(&gradient, yinc * y + off));
             blend_color_rgb16(1, spans, userData);
             ++spans;
         }
-        data->solid.color = oldColor;
+        data->gradient = gradient;
 
     } else {
         blend_src_generic(count, spans, userData);
@@ -5747,9 +5755,9 @@ static inline void rgbBlendPixel(quint32 *dst, int coverage, int sr, int sg, int
     dg = gamma[dg];
     db = gamma[db];
 
-    int nr = qt_div_255((sr - dr) * mr) + dr;
-    int ng = qt_div_255((sg - dg) * mg) + dg;
-    int nb = qt_div_255((sb - db) * mb) + db;
+    int nr = qt_div_255(sr * mr + dr * (255 - mr));
+    int ng = qt_div_255(sg * mg + dg * (255 - mg));
+    int nb = qt_div_255(sb * mb + db * (255 - mb));
 
     nr = invgamma[nr];
     ng = invgamma[ng];
@@ -5774,9 +5782,9 @@ static inline void grayBlendPixel(quint32 *dst, int coverage, int sr, int sg, in
 
     int alpha = coverage;
     int ialpha = 255 - alpha;
-    int nr = (sr * alpha + ialpha * dr) / 255;
-    int ng = (sg * alpha + ialpha * dg) / 255;
-    int nb = (sb * alpha + ialpha * db) / 255;
+    int nr = qt_div_255(sr * alpha + dr * ialpha);
+    int ng = qt_div_255(sg * alpha + dg * ialpha);
+    int nb = qt_div_255(sb * alpha + db * ialpha);
 
     nr = invgamma[nr];
     ng = invgamma[ng];

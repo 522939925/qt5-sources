@@ -31,19 +31,6 @@
 
     \brief Contains information about issues that are specific to the Qt WebEngine module.
 
-    \section1 Target Platforms
-
-    Qt WebEngine does try to support all \l{Supported Platforms} of Qt. However, due to
-    different requirements of Chromium this is not always possible. Known limitations are:
-
-    \list
-        \li Qt WebEngine currently supports only Windows, Linux, and OS X.
-
-        \li On Windows, Qt WebEngine only supports Windows Vista or newer as target platform.
-            Due to use of newer API in Chromium, Windows XP is not supported. WinRT is
-            not supported, either.
-    \endlist
-
     \section1 Building Qt WebEngine from Source
 
     Static builds are not supported.
@@ -54,7 +41,7 @@
     \list
         \li \l{Qt for Windows - Requirements}
         \li \l{Qt for X11 Requirements}
-        \li \l{Qt for OS X - Requirements}
+        \li \l{Qt for macOS - Requirements}
     \endlist
 
     In addition, the following tools are required for building the \l {Qt WebEngine} module:
@@ -63,7 +50,7 @@
         \li \l {All Platforms}
         \li \l {Windows}
         \li \l {Linux}
-        \li \l {OS X}
+        \li \l {macOS}
     \endlist
 
     The tests for skipping the Qt WebEngine build are located in the
@@ -87,6 +74,7 @@
     \section2 Linux
 
     On Linux, Clang or GCC version 4.7 or later is required.
+    Supported configurations are \c linux-g++ and \c{linux-clang}.
 
     Qt WebEngine requires \c pkg-config to detect most of its dependencies. The
     following \c pkg-config files are required:
@@ -111,11 +99,17 @@
 
     Further, development packages for \c khr and \c libcap need to be installed.
 
-    \section2 OS X
+    \section2 \macos
 
-    On OS X, Xcode version 5.1 or later on OS X 10.9 or later is required.
+    On \macos, the following are required:
 
-    \note Qt WebEngine cannot be built for the 32-bit mode of OS X (using the
+    \list
+        \li \macos 10.9 or later
+        \li Xcode 6.1 or later
+        \li \macos 10.10 SDK or later
+    \endlist
+
+    \note Qt WebEngine cannot be built for the 32-bit mode of \macos (using the
     \c macx-clang-32 \c mkspec).
 
     \section1 Mac App Store Compatibility
@@ -143,7 +137,7 @@
     before the application instance is declared, to make sure that all created OpenGL contexts use
     the same OpenGL profile.
 
-    On OS X, if the default QSurfaceFormat is set after the application instance, the application
+    On \macos, if the default QSurfaceFormat is set after the application instance, the application
     will exit with qFatal(), and print a message that the default QSurfaceFormat should be set
     before the application instance.
 */

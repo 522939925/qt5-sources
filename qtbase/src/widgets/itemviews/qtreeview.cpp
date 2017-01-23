@@ -2303,8 +2303,8 @@ QModelIndex QTreeView::moveCursor(CursorAction cursorAction, Qt::KeyboardModifie
                     int visualColumn = d->header->visualIndex(current.column()) + 1;
                     while (visualColumn < d->model->columnCount(current.parent()) && isColumnHidden(d->header->logicalIndex(visualColumn)))
                         visualColumn++;
-
-                    QModelIndex next = current.sibling(current.row(), visualColumn);
+                    const int newColumn = d->header->logicalIndex(visualColumn);
+                    const QModelIndex next = current.sibling(current.row(), newColumn);
                     if (next.isValid())
                         return next;
                 }
@@ -2357,10 +2357,10 @@ void QTreeView::setSelection(const QRect &rect, QItemSelectionModel::SelectionFl
         return;
     }
     if (!topLeft.isValid() && !d->viewItems.isEmpty())
-        topLeft = d->viewItems.first().index;
+        topLeft = d->viewItems.constFirst().index;
     if (!bottomRight.isValid() && !d->viewItems.isEmpty()) {
         const int column = d->header->logicalIndex(d->header->count() - 1);
-        const QModelIndex index = d->viewItems.last().index;
+        const QModelIndex index = d->viewItems.constLast().index;
         bottomRight = index.sibling(index.row(), column);
     }
 
@@ -2668,9 +2668,9 @@ void QTreeView::selectAll()
     SelectionMode mode = d->selectionMode;
     d->executePostedLayout(); //make sure we lay out the items
     if (mode != SingleSelection && mode != NoSelection && !d->viewItems.isEmpty()) {
-        const QModelIndex &idx = d->viewItems.last().index;
+        const QModelIndex &idx = d->viewItems.constLast().index;
         QModelIndex lastItemIndex = idx.sibling(idx.row(), d->model->columnCount(idx.parent()) - 1);
-        d->select(d->viewItems.first().index, lastItemIndex,
+        d->select(d->viewItems.constFirst().index, lastItemIndex,
                   QItemSelectionModel::ClearAndSelect
                   |QItemSelectionModel::Rows);
     }
@@ -3232,7 +3232,8 @@ void QTreeViewPrivate::drawAnimatedOperation(QPainter *painter) const
 QPixmap QTreeViewPrivate::renderTreeToPixmapForAnimation(const QRect &rect) const
 {
     Q_Q(const QTreeView);
-    QPixmap pixmap(rect.size());
+    QPixmap pixmap(rect.size() * q->devicePixelRatio());
+    pixmap.setDevicePixelRatio(q->devicePixelRatio());
     if (rect.size().isEmpty())
         return pixmap;
     pixmap.fill(Qt::transparent); //the base might not be opaque, and we don't want uninitialized pixels.

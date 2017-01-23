@@ -86,6 +86,8 @@ public:
     Qt::FocusReason focusReason() const;
     void setFocusReason(Qt::FocusReason reason);
 
+    bool contains(const QPointF &point) const override;
+
 Q_SIGNALS:
     void fontChanged();
     void implicitWidthChanged3();
@@ -108,6 +110,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void timerEvent(QTimerEvent *event) override;
 
 private:

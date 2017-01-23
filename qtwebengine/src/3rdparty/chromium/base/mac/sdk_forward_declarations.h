@@ -12,6 +12,7 @@
 #define BASE_MAC_SDK_FORWARD_DECLARATIONS_H_
 
 #import <AppKit/AppKit.h>
+#import <CoreBluetooth/CoreBluetooth.h>
 #import <CoreWLAN/CoreWLAN.h>
 #import <ImageCaptureCore/ImageCaptureCore.h>
 #import <IOBluetooth/IOBluetooth.h>
@@ -292,7 +293,9 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantDark;
     MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7
 
 @interface NSEvent (LionSDK)
+#if !defined(QT_DISABLE_FORCE_TOUCH)
 @property(readonly) NSInteger stage;
+#endif
 + (BOOL)isSwipeTrackingFromScrollEventsEnabled;
 - (NSEventPhase)momentumPhase;
 - (NSEventPhase)phase;

@@ -928,7 +928,7 @@ void QTextEngine::shapeLine(const QScriptLine &line)
     if (item == -1)
         return;
 
-    const int end = findItem(line.from + line.length - 1, item);
+    const int end = findItem(line.from + line.length + line.trailingSpaces - 1, item);
     for ( ; item <= end; ++item) {
         QScriptItem &si = layoutData->items[item];
         if (si.analysis.flags == QScriptAnalysis::Tab) {
@@ -1569,12 +1569,13 @@ void QTextEngine::validate() const
     layoutData = new LayoutData();
     if (block.docHandle()) {
         layoutData->string = block.text();
-        if (block.next().isValid()) {
-            if (option.flags() & QTextOption::ShowLineAndParagraphSeparators)
-                layoutData->string += QChar(0xb6);
-        } else if (option.flags() & QTextOption::ShowDocumentTerminator) {
+        const bool nextBlockValid = block.next().isValid();
+        if (!nextBlockValid && option.flags() & QTextOption::ShowDocumentTerminator) {
             layoutData->string += QChar(0xA7);
+        } else if (option.flags() & QTextOption::ShowLineAndParagraphSeparators) {
+            layoutData->string += QLatin1Char(nextBlockValid ? 0xb6 : 0x20);
         }
+
     } else {
         layoutData->string = text;
     }
@@ -1645,8 +1646,14 @@ void QTextEngine::itemize() const
             if (analysis->bidiLevel % 2)
                 --analysis->bidiLevel;
             analysis->flags = QScriptAnalysis::LineOrParagraphSeparator;
-            if (option.flags() & QTextOption::ShowLineAndParagraphSeparators)
+            if (option.flags() & QTextOption::ShowLineAndParagraphSeparators) {
+                const int offset = uc - string;
+                layoutData->string.detach();
+                string = reinterpret_cast<const ushort *>(layoutData->string.unicode());
+                uc = string + offset;
+                e = uc + length;
                 *const_cast<ushort*>(uc) = 0x21B5; // visual line separator
+            }
             break;
         case QChar::Tabulation:
             analysis->flags = QScriptAnalysis::Tab;
@@ -2062,6 +2069,9 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
                     font = font.resolve(fnt);
                 }
                 engine = font.d->engineForScript(script);
+                if (engine)
+                    engine->ref.ref();
+
                 QTextCharFormat::VerticalAlignment valign = f.verticalAlignment();
                 if (valign == QTextCharFormat::AlignSuperScript || valign == QTextCharFormat::AlignSubScript) {
                     if (font.pointSize() != -1)
@@ -2069,16 +2079,14 @@ QFontEngine *QTextEngine::fontEngine(const QScriptItem &si, QFixed *ascent, QFix
                     else
                         font.setPixelSize((font.pixelSize() * 2) / 3);
                     scaledEngine = font.d->engineForScript(script);
+                    if (scaledEngine)
+                        scaledEngine->ref.ref();
                 }
 
-                if (engine)
-                    engine->ref.ref();
                 if (feCache.prevFontEngine)
                     releaseCachedFontEngine(feCache.prevFontEngine);
                 feCache.prevFontEngine = engine;
 
-                if (scaledEngine)
-                    scaledEngine->ref.ref();
                 if (feCache.prevScaledFontEngine)
                     releaseCachedFontEngine(feCache.prevScaledFontEngine);
                 feCache.prevScaledFontEngine = scaledEngine;
@@ -3274,7 +3282,7 @@ int QTextEngine::endOfLine(int lineNum)
     insertionPointsForLine(lineNum, insertionPoints);
 
     if (insertionPoints.size() > 0)
-        return insertionPoints.last();
+        return insertionPoints.constLast();
     return 0;
 }
 
@@ -3284,7 +3292,7 @@ int QTextEngine::beginningOfLine(int lineNum)
     insertionPointsForLine(lineNum, insertionPoints);
 
     if (insertionPoints.size() > 0)
-        return insertionPoints.first();
+        return insertionPoints.constFirst();
     return 0;
 }
 

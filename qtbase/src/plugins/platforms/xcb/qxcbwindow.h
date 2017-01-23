@@ -103,7 +103,7 @@ public:
     bool setKeyboardGrabEnabled(bool grab) Q_DECL_OVERRIDE;
     bool setMouseGrabEnabled(bool grab) Q_DECL_OVERRIDE;
 
-    void setCursor(xcb_cursor_t cursor);
+    void setCursor(xcb_cursor_t cursor, bool isBitmapCursor);
 
     QSurfaceFormat format() const Q_DECL_OVERRIDE;
 
@@ -151,10 +151,12 @@ public:
     void updateNetWmUserTime(xcb_timestamp_t timestamp);
 
     static void setWmWindowTypeStatic(QWindow *window, QXcbWindowFunctions::WmWindowTypes windowTypes);
+    static void setWmWindowRoleStatic(QWindow *window, const QByteArray &role);
     static uint visualIdStatic(QWindow *window);
 
     QXcbWindowFunctions::WmWindowTypes wmWindowTypes() const;
     void setWmWindowType(QXcbWindowFunctions::WmWindowTypes types, Qt::WindowFlags flags);
+    void setWmWindowRole(const QByteArray &role);
 
     static void setWindowIconTextStatic(QWindow *window, const QString &text);
 
@@ -256,6 +258,7 @@ protected:
     mutable QMargins m_frameMargins;
 
     QRegion m_exposeRegion;
+    QSize m_oldWindowSize;
 
     xcb_visualid_t m_visualId;
     int m_lastWindowStateEvent;
@@ -268,6 +271,7 @@ protected:
     SyncState m_syncState;
 
     QXcbSyncWindowRequest *m_pendingSyncRequest;
+    xcb_cursor_t m_currentBitmapCursor;
 };
 
 QT_END_NAMESPACE

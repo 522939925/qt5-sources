@@ -819,7 +819,7 @@ static const ushort * const fragmentInUrl = userNameInUrl + 6;
 
 static inline void parseDecodedComponent(QString &data)
 {
-    data.replace(QLatin1Char('%'), QStringLiteral("%25"));
+    data.replace(QLatin1Char('%'), QLatin1String("%25"));
 }
 
 static inline QString
@@ -984,10 +984,12 @@ inline bool QUrlPrivate::setScheme(const QString &value, int len, bool doSetErro
             needsLowercasing = i;
             continue;
         }
-        if (p[i] >= '0' && p[i] <= '9' && i > 0)
-            continue;
-        if (p[i] == '+' || p[i] == '-' || p[i] == '.')
-            continue;
+        if (i) {
+            if (p[i] >= '0' && p[i] <= '9')
+                continue;
+            if (p[i] == '+' || p[i] == '-' || p[i] == '.')
+                continue;
+        }
 
         // found something else
         // don't call setError needlessly:
@@ -1475,7 +1477,7 @@ QString QUrlPrivate::toLocalFile(QUrl::FormattingOptions options) const
 
     // magic for shared drive on windows
     if (!host.isEmpty()) {
-        tmp = QStringLiteral("//") + host;
+        tmp = QLatin1String("//") + host;
 #ifdef Q_OS_WIN // QTBUG-42346, WebDAV is visible as local file on Windows only.
         if (scheme == webDavScheme())
             tmp += webDavSslTag();
@@ -3170,8 +3172,8 @@ QUrl QUrl::resolved(const QUrl &relative) const
     if (!relative.d) return *this;
 
     QUrl t;
-    // be non strict and allow scheme in relative url
-    if (!relative.d->scheme.isEmpty() && relative.d->scheme != d->scheme) {
+    // Compatibility hack (mostly for qtdeclarative) : treat "file:relative.txt" as relative even though QUrl::isRelative() says false
+    if (!relative.d->scheme.isEmpty() && (!relative.isLocalFile() || QDir::isAbsolutePath(relative.d->path))) {
         t = relative;
         t.detach();
     } else {

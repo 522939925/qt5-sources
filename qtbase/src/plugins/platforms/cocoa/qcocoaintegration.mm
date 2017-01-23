@@ -300,8 +300,6 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
     initResources();
     QMacAutoReleasePool pool;
 
-    qApp->setAttribute(Qt::AA_DontUseNativeMenuBar, false);
-
     NSApplication *cocoaApplication = [QNSApplication sharedApplication];
     qt_redirectNSApplicationSendEvent();
 
@@ -457,6 +455,10 @@ QCocoaScreen *QCocoaIntegration::screenAtIndex(int index)
     if (index >= mScreens.count())
         updateScreens();
 
+    // It is possible that the screen got removed while updateScreens was called
+    // so we do a sanity check to be certain
+    if (index >= mScreens.count())
+        return 0;
     return mScreens.at(index);
 }
 

@@ -304,6 +304,12 @@ Configure::Configure(int& argc, char** argv) : verbose(0)
         dictionary["QT_GCC_MAJOR_VERSION"] = parts.value(0, zero);
         dictionary["QT_GCC_MINOR_VERSION"] = parts.value(1, zero);
         dictionary["QT_GCC_PATCH_VERSION"] = parts.value(2, zero);
+    } else if (dictionary["QMAKESPEC"].contains(QString("msvc"))) {
+        const QString zero = QStringLiteral("0");
+        const QStringList parts = Environment::msvcVersion().split(QLatin1Char('.'));
+        dictionary["QT_CL_MAJOR_VERSION"] = parts.value(0, zero);
+        dictionary["QT_CL_MINOR_VERSION"] = parts.value(1, zero);
+        dictionary["QT_CL_PATCH_VERSION"] = parts.value(2, zero);
     }
 }
 
@@ -526,6 +532,12 @@ void Configure::parseCmdLine()
             if (i == argCount)
                 break;
             const QString option = configCmdLine.at(i);
+            if (option == "xp") {
+                cout << "ERROR: option \"-target xp\" is no longer valid" << endl;
+                dictionary["DONE"] = "error";
+                return;
+            }
+
             if (option != "xp") {
                 cout << "ERROR: invalid argument for -target option" << endl;
                 dictionary["DONE"] = "error";
@@ -1817,9 +1829,6 @@ bool Configure::displayHelp()
         desc(                   "-xplatform <spec>",    "The operating system and compiler you are cross compiling to.\n");
         desc(                   "",                     "See the README file for a list of supported operating systems and compilers.\n", false, ' ');
 
-        desc("TARGET_OS", "*", "-target",               "Set target OS version. Currently the only valid value is 'xp' for targeting Windows XP.\n"
-                                                        "MSVC >= 2012 targets Windows Vista by default.\n");
-
         desc(                   "-sysroot <dir>",       "Sets <dir> as the target compiler's and qmake's sysroot and also sets pkg-config paths.");
         desc(                   "-no-gcc-sysroot",      "When using -sysroot, it disables the passing of --sysroot to the compiler.\n");
 
@@ -1926,7 +1935,7 @@ bool Configure::displayHelp()
         }
 
         desc("ANGLE", "yes",       "-angle",            "Use the ANGLE implementation of OpenGL ES 2.0.");
-        desc("ANGLE", "no",        "-no-angle",         "Do not use ANGLE.\nSee http://code.google.com/p/angleproject/\n");
+        desc("ANGLE", "no",        "-no-angle",         "Do not use ANGLE.\nSee https://chromium.googlesource.com/angle/angle/+/master/README.md\n");
         // Qt\Windows only options go below here --------------------------------------------------------------------------------
         desc("\nQt for Windows only:\n\n");
 
@@ -2172,6 +2181,9 @@ bool Configure::checkAvailability(const QString &part)
     else if (part == "ATOMIC64-LIBATOMIC")
         available = tryCompileProject("common/atomic64", "LIBS+=-latomic");
 
+    else if (part == "ATOMICFPTR")
+        available = tryCompileProject("common/atomicfptr");
+
     else if (part == "ZLIB")
         available = findFile("zlib.h");
 
@@ -2304,12 +2316,7 @@ void Configure::autoDetection()
     detectArch();
 
     if (dictionary["C++STD"] == "auto" && !dictionary["QMAKESPEC"].contains("msvc")) {
-        if (!tryCompileProject("common/c++11")) {
-            dictionary["DONE"] = "error";
-            cout << "ERROR: Qt requires a C++11 compiler and yours does not seem to be that." << endl
-                 << "Please upgrade." << endl;
-            return;
-        } else if (!tryCompileProject("common/c++14")) {
+        if (!tryCompileProject("common/c++14")) {
             dictionary["C++STD"] = "c++11";
         } else if (!tryCompileProject("common/c++1z")) {
             dictionary["C++STD"] = "c++14";
@@ -2337,6 +2344,15 @@ void Configure::autoDetection()
     if (dictionary["ATOMIC64"] == "auto")
         dictionary["ATOMIC64"] = checkAvailability("ATOMIC64") ? "yes" :
                                  checkAvailability("ATOMIC64-LIBATOMIC") ? "libatomic" : "no";
+
+    // special case:
+    if (!checkAvailability("ATOMICFPTR")) {
+        dictionary["DONE"] = "error";
+        cout << "ERROR: detected an std::atomic implementation that fails for function pointers." << endl
+             << "Please apply the patch corresponding to your Standard Library vendor, found in" << endl
+             << sourcePath << "/config.tests/common/atomicfptr" << endl;
+        return;
+    }
 
     // Style detection
     if (dictionary["STYLE_WINDOWSXP"] == "auto")
@@ -2906,7 +2922,7 @@ void Configure::generateOutputVars()
         qtConfig += "accessibility";
 
     if (!qmakeLibs.isEmpty())
-        qmakeVars += "LIBS           += " + formatPaths(qmakeLibs);
+        qmakeVars += "EXTRA_LIBS += " + formatPaths(qmakeLibs);
 
     if (!dictionary["QT_LFLAGS_SQLITE"].isEmpty())
         qmakeVars += "QT_LFLAGS_SQLITE += " + dictionary["QT_LFLAGS_SQLITE"];
@@ -3027,9 +3043,9 @@ void Configure::generateOutputVars()
         qtConfig += "rpath";
 
     if (!qmakeDefines.isEmpty())
-        qmakeVars += QString("DEFINES        += ") + qmakeDefines.join(' ');
+        qmakeVars += QString("EXTRA_DEFINES += ") + qmakeDefines.join(' ');
     if (!qmakeIncludes.isEmpty())
-        qmakeVars += QString("INCLUDEPATH    += ") + formatPaths(qmakeIncludes);
+        qmakeVars += QString("EXTRA_INCLUDEPATH += ") + formatPaths(qmakeIncludes);
     if (!opensslLibs.isEmpty())
         qmakeVars += opensslLibs;
     if (dictionary[ "OPENSSL" ] == "linked") {
@@ -3543,6 +3559,10 @@ void Configure::generateQConfigPri()
             configStream << "QT_GCC_MAJOR_VERSION = " << dictionary["QT_GCC_MAJOR_VERSION"] << endl
                          << "QT_GCC_MINOR_VERSION = " << dictionary["QT_GCC_MINOR_VERSION"] << endl
                          << "QT_GCC_PATCH_VERSION = " << dictionary["QT_GCC_PATCH_VERSION"] << endl;
+        } else if (!dictionary["QT_CL_MAJOR_VERSION"].isEmpty()) {
+            configStream << "QT_CL_MAJOR_VERSION = " << dictionary["QT_CL_MAJOR_VERSION"] << endl
+                         << "QT_CL_MINOR_VERSION = " << dictionary["QT_CL_MINOR_VERSION"] << endl
+                         << "QT_CL_PATCH_VERSION = " << dictionary["QT_CL_PATCH_VERSION"] << endl;
         }
 
         if (dictionary.value("XQMAKESPEC").startsWith("wince")) {

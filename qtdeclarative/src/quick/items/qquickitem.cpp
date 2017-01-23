@@ -421,21 +421,44 @@ void QQuickItemKeyFilter::componentComplete()
 
 /*!
     \qmlproperty Item QtQuick::KeyNavigation::left
+
+    This property holds the item to assign focus to
+    when the left cursor key is pressed.
+*/
+
+/*!
     \qmlproperty Item QtQuick::KeyNavigation::right
+
+    This property holds the item to assign focus to
+    when the right cursor key is pressed.
+*/
+
+/*!
     \qmlproperty Item QtQuick::KeyNavigation::up
+
+    This property holds the item to assign focus to
+    when the up cursor key is pressed.
+*/
+
+/*!
     \qmlproperty Item QtQuick::KeyNavigation::down
 
-    These properties hold the item to assign focus to
-    when the left, right, up or down cursor keys
-    are pressed.
+    This property holds the item to assign focus to
+    when the down cursor key is pressed.
 */
 
 /*!
     \qmlproperty Item QtQuick::KeyNavigation::tab
+
+    This property holds the item to assign focus to
+    when the Tab key is pressed.
+*/
+
+/*!
     \qmlproperty Item QtQuick::KeyNavigation::backtab
 
-    These properties hold the item to assign focus to
-    when the Tab key or Shift+Tab key combination (Backtab) are pressed.
+    This property holds the item to assign focus to
+    when the Shift+Tab key combination (Backtab) is pressed.
 */
 
 QQuickKeyNavigationAttached::QQuickKeyNavigationAttached(QObject *parent)
@@ -2079,6 +2102,9 @@ void QQuickItemPrivate::updateSubFocusItem(QQuickItem *scope, bool focus)
     \value ItemDevicePixelRatioHasChanged The device pixel ratio of the screen
     the item is on has changed. ItemChangedData::realValue contains the new
     device pixel ratio.
+
+    \value ItemAntialiasingHasChanged The antialiasing has changed. The current
+    (boolean) value can be found in QQuickItem::antialiasing.
 */
 
 /*!
@@ -5739,6 +5765,8 @@ bool QQuickItemPrivate::setEffectiveVisibleRecur(bool newEffectiveVisible)
         QQuickWindowPrivate *windowPriv = QQuickWindowPrivate::get(window);
         if (windowPriv->mouseGrabberItem == q)
             q->ungrabMouse();
+        if (!effectiveVisible)
+            q->ungrabTouchPoints();
     }
 
     bool childVisibilityChanged = false;
@@ -5787,6 +5815,8 @@ void QQuickItemPrivate::setEffectiveEnableRecur(QQuickItem *scope, bool newEffec
         QQuickWindowPrivate *windowPriv = QQuickWindowPrivate::get(window);
         if (windowPriv->mouseGrabberItem == q)
             q->ungrabMouse();
+        if (!effectiveEnable)
+            q->ungrabTouchPoints();
         if (scope && !effectiveEnable && activeFocus) {
             windowPriv->clearFocusInScope(
                     scope, q, Qt::OtherFocusReason, QQuickWindowPrivate::DontChangeFocusProperty | QQuickWindowPrivate::DontChangeSubFocusItem);
@@ -7037,15 +7067,6 @@ void QQuickItemPrivate::setHasCursorInChild(bool hasCursor)
 #endif
 }
 
-void QQuickItemPrivate::markObjects(QV4::ExecutionEngine *e)
-{
-    Q_Q(QQuickItem);
-    QV4::QObjectWrapper::markWrapper(q, e);
-
-    foreach (QQuickItem *child, childItems)
-        QQuickItemPrivate::get(child)->markObjects(e);
-}
-
 #ifndef QT_NO_CURSOR
 
 /*!
@@ -8225,6 +8246,38 @@ QAccessible::Role QQuickItemPrivate::accessibleRole() const
     return QAccessible::NoRole;
 }
 #endif
+
+// helper code to let a visual parent mark its visual children for the garbage collector
+
+namespace QV4 {
+namespace Heap {
+struct QQuickItemWrapper : public QObjectWrapper {
+    QQuickItemWrapper(QQuickItem *item) : QObjectWrapper(item) {}
+};
+}
+}
+
+struct QQuickItemWrapper : public QV4::QObjectWrapper {
+    V4_OBJECT2(QQuickItemWrapper, QV4::QObjectWrapper)
+    static void markObjects(QV4::Heap::Base *that, QV4::ExecutionEngine *e);
+};
+
+DEFINE_OBJECT_VTABLE(QQuickItemWrapper);
+
+void QQuickItemWrapper::markObjects(QV4::Heap::Base *that, QV4::ExecutionEngine *e)
+{
+    QObjectWrapper::Data *This = static_cast<QObjectWrapper::Data *>(that);
+    if (QQuickItem *item = static_cast<QQuickItem*>(This->object.data())) {
+        foreach (QQuickItem *child, QQuickItemPrivate::get(item)->childItems)
+            QV4::QObjectWrapper::markWrapper(child, e);
+    }
+    QV4::QObjectWrapper::markObjects(that, e);
+}
+
+quint64 QQuickItemPrivate::_q_createJSWrapper(QV4::ExecutionEngine *engine)
+{
+    return (engine->memoryManager->allocObject<QQuickItemWrapper>(q_func()))->asReturnedValue();
+}
 
 QT_END_NAMESPACE
 

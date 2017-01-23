@@ -3693,7 +3693,6 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
                 continue;
 #ifndef QT_NO_THREAD
             } else if (c->connectionType == Qt::BlockingQueuedConnection) {
-                locker.unlock();
                 if (receiverInSameThread) {
                     qWarning("Qt: Dead lock detected while activating a BlockingQueuedConnection: "
                     "Sender is %s(%p), receiver is %s(%p)",
@@ -3705,6 +3704,7 @@ void QMetaObject::activate(QObject *sender, int signalOffset, int local_signal_i
                     new QMetaCallEvent(c->slotObj, sender, signal_index, 0, 0, argv ? argv : empty_argv, &semaphore) :
                     new QMetaCallEvent(c->method_offset, c->method_relative, c->callFunction, sender, signal_index, 0, 0, argv ? argv : empty_argv, &semaphore);
                 QCoreApplication::postEvent(receiver, ev);
+                locker.unlock();
                 semaphore.acquire();
                 locker.relock();
                 continue;
@@ -4272,7 +4272,7 @@ QDebug operator<<(QDebug dbg, const QObject *o)
     \relates QObject
     \since 5.5
 
-    This macro registers a single \l{QFlags}{flags types} with the
+    This macro registers a single \l{QFlags}{flags type} with the
     meta-object system. It is typically used in a class definition to declare
     that values of a given enum can be used as flags and combined using the
     bitwise OR operator.
@@ -4699,7 +4699,7 @@ QMetaObject::Connection QObjectPrivate::connectImpl(const QObject *sender, int s
     QOrderedMutexLocker locker(signalSlotLock(sender),
                                signalSlotLock(receiver));
 
-    if (type & Qt::UniqueConnection) {
+    if (type & Qt::UniqueConnection && slot) {
         QObjectConnectionListVector *connectionLists = QObjectPrivate::get(s)->connectionLists;
         if (connectionLists && connectionLists->count() > signal_index) {
             const QObjectPrivate::Connection *c2 =

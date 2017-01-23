@@ -82,6 +82,7 @@ private slots:
     void dragging_data() { acceptedButton_data(); }
     void dragging();
     void dragSmoothed();
+    void dragThreshold_data();
     void dragThreshold();
     void invalidDrag_data() { rejectedButton_data(); }
     void invalidDrag();
@@ -119,6 +120,7 @@ private slots:
     void moveAndReleaseWithoutPress();
     void nestedStopAtBounds();
     void nestedStopAtBounds_data();
+    void nestedFlickableStopAtBounds();
     void containsPress_data();
     void containsPress();
     void ignoreBySource();
@@ -390,8 +392,17 @@ void tst_QQuickMouseArea::dragSmoothed()
     QTest::mouseRelease(&window, Qt::LeftButton, 0, QPoint(100, 122));
 }
 
+void tst_QQuickMouseArea::dragThreshold_data()
+{
+    QTest::addColumn<bool>("preventStealing");
+    QTest::newRow("without preventStealing") << false;
+    QTest::newRow("with preventStealing") << true;
+}
+
 void tst_QQuickMouseArea::dragThreshold()
 {
+    QFETCH(bool, preventStealing);
+
     QQuickView window;
     QByteArray errorMessage;
     QVERIFY2(initView(window, testFileUrl("dragging.qml"), true, &errorMessage), errorMessage.constData());
@@ -401,6 +412,7 @@ void tst_QQuickMouseArea::dragThreshold()
     QVERIFY(window.rootObject() != 0);
 
     QQuickMouseArea *mouseRegion = window.rootObject()->findChild<QQuickMouseArea*>("mouseregion");
+    mouseRegion->setPreventStealing(preventStealing);
     QQuickDrag *drag = mouseRegion->drag();
 
     drag->setThreshold(5);
@@ -1036,17 +1048,17 @@ void tst_QQuickMouseArea::clickThrough()
     QVERIFY(QTest::qWaitForWindowExposed(window.data()));
     QVERIFY(window->rootObject() != 0);
 
+    // to avoid generating a double click.
+    const int doubleClickInterval = qApp->styleHints()->mouseDoubleClickInterval() + 10;
+
     QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
 
     QTRY_COMPARE(window->rootObject()->property("presses").toInt(), 0);
     QTRY_COMPARE(window->rootObject()->property("clicks").toInt(), 1);
 
-    // to avoid generating a double click.
-    int doubleClickInterval = qApp->styleHints()->mouseDoubleClickInterval() + 10;
-    QTest::qWait(doubleClickInterval);
-
-    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
+    QCOMPARE(window->rootObject()->property("doubleClicks").toInt(), 0);
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100), doubleClickInterval);
     QTest::qWait(1000);
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
 
@@ -1076,9 +1088,7 @@ void tst_QQuickMouseArea::clickThrough()
     QCOMPARE(window->rootObject()->property("presses").toInt(), 0);
     QCOMPARE(window->rootObject()->property("clicks").toInt(), 0);
 
-    QTest::qWait(doubleClickInterval); // to avoid generating a double click.
-
-    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100), doubleClickInterval);
     QTest::qWait(1000);
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
     QTest::qWait(100);
@@ -1097,15 +1107,13 @@ void tst_QQuickMouseArea::clickThrough()
 
     window->rootObject()->setProperty("letThrough", QVariant(true));
 
-    QTest::qWait(doubleClickInterval); // to avoid generating a double click.
-    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100), doubleClickInterval);
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
 
     QCOMPARE(window->rootObject()->property("presses").toInt(), 0);
     QTRY_COMPARE(window->rootObject()->property("clicks").toInt(), 1);
 
-    QTest::qWait(doubleClickInterval); // to avoid generating a double click.
-    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100), doubleClickInterval);
     QTest::qWait(1000);
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
     QTest::qWait(100);
@@ -1124,12 +1132,10 @@ void tst_QQuickMouseArea::clickThrough()
 
     window->rootObject()->setProperty("noPropagation", QVariant(true));
 
-    QTest::qWait(doubleClickInterval); // to avoid generating a double click.
-    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100), doubleClickInterval);
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
 
-    QTest::qWait(doubleClickInterval); // to avoid generating a double click.
-    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100), doubleClickInterval);
     QTest::qWait(1000);
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
     QTest::qWait(100);
@@ -1150,7 +1156,7 @@ void tst_QQuickMouseArea::clickThrough()
     QVERIFY(QTest::qWaitForWindowExposed(window.data()));
     QVERIFY(window->rootObject() != 0);
 
-    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100), doubleClickInterval);
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
 
     QCOMPARE(window->rootObject()->property("clicksEnabled").toInt(), 1);
@@ -1158,8 +1164,7 @@ void tst_QQuickMouseArea::clickThrough()
 
     window->rootObject()->setProperty("disableLower", QVariant(true));
 
-    QTest::qWait(doubleClickInterval); // to avoid generating a double click.
-    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100));
+    QTest::mousePress(window.data(), Qt::LeftButton, 0, QPoint(100,100), doubleClickInterval);
     QTest::mouseRelease(window.data(), Qt::LeftButton, 0, QPoint(100,100));
 
     QCOMPARE(window->rootObject()->property("clicksEnabled").toInt(), 2);
@@ -1744,6 +1749,98 @@ void tst_QQuickMouseArea::nestedStopAtBounds()
     QTest::mouseMove(&view, position);
     QTRY_COMPARE(outer->drag()->active(), false);
     QTRY_COMPARE(inner->drag()->active(), true);
+    QTest::mouseRelease(&view, Qt::LeftButton, 0, position);
+}
+
+void tst_QQuickMouseArea::nestedFlickableStopAtBounds()
+{
+    QQuickView view;
+    QByteArray errorMessage;
+    QVERIFY2(initView(view, testFileUrl("nestedFlickableStopAtBounds.qml"), false, &errorMessage), errorMessage.constData());
+    view.show();
+    view.requestActivate();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.rootObject());
+
+    QQuickMouseArea *mouseArea =  view.rootObject()->findChild<QQuickMouseArea*>("mouseArea");
+    QVERIFY(mouseArea);
+
+    QQuickFlickable *flickable = mouseArea->findChild<QQuickFlickable*>("flickable");
+    QVERIFY(flickable);
+
+    const int threshold = qApp->styleHints()->startDragDistance();
+
+    QPoint position(200, 280);
+    int &pos = position.ry();
+
+    // Drag up - should move the Flickable to end
+    QTest::mousePress(&view, Qt::LeftButton, 0, position);
+    QTest::qWait(10);
+    pos -= threshold * 2;
+    QTest::mouseMove(&view, position);
+    pos -= threshold * 2;
+    QTest::mouseMove(&view, position);
+    QTest::qWait(10);
+    pos -= 150;
+    QTest::mouseMove(&view, position);
+    QVERIFY(flickable->isDragging());
+    QVERIFY(!mouseArea->drag()->active());
+    QCOMPARE(flickable->isAtYEnd(), true);
+    QTest::mouseRelease(&view, Qt::LeftButton, 0, position);
+
+    QTRY_VERIFY(!flickable->isMoving());
+
+    pos = 280;
+
+    // Drag up again - should activate MouseArea drag
+    QVERIFY(!mouseArea->drag()->active());
+    QTest::mousePress(&view, Qt::LeftButton, 0, position);
+    QTest::qWait(10);
+    pos -= threshold * 2;
+    QTest::mouseMove(&view, position);
+    pos -= threshold * 2;
+    QTest::mouseMove(&view, position);
+    QTest::qWait(10);
+    pos -= 20;
+    QTest::mouseMove(&view, position);
+    QVERIFY(mouseArea->drag()->active());
+    QCOMPARE(flickable->isAtYEnd(), true);
+    QVERIFY(!flickable->isDragging());
+    QTest::mouseRelease(&view, Qt::LeftButton, 0, position);
+
+    // Drag to the top and verify that the MouseArea doesn't steal the grab when we drag back (QTBUG-56036)
+    pos = 50;
+
+    QTest::mousePress(&view, Qt::LeftButton, 0, position);
+    QTest::qWait(10);
+    pos += threshold;
+    QTest::mouseMove(&view, position);
+    pos += threshold;
+    QTest::mouseMove(&view, position);
+    QTest::qWait(10);
+    pos += 150;
+    QTest::mouseMove(&view, position);
+    QVERIFY(flickable->isDragging());
+    QVERIFY(!mouseArea->drag()->active());
+    QCOMPARE(flickable->isAtYBeginning(), true);
+    QTest::mouseRelease(&view, Qt::LeftButton, 0, position);
+
+    QTRY_VERIFY(!flickable->isMoving());
+
+    pos = 280;
+
+    // Drag up again - should not activate MouseArea drag
+    QTest::mousePress(&view, Qt::LeftButton, 0, position);
+    QTest::qWait(10);
+    pos -= threshold;
+    QTest::mouseMove(&view, position);
+    pos -= threshold;
+    QTest::mouseMove(&view, position);
+    QTest::qWait(10);
+    pos -= 100;
+    QTest::mouseMove(&view, position);
+    QVERIFY(flickable->isDragging());
+    QVERIFY(!mouseArea->drag()->active());
     QTest::mouseRelease(&view, Qt::LeftButton, 0, position);
 }
 

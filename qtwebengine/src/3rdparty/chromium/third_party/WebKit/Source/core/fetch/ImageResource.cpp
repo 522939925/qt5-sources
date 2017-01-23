@@ -367,12 +367,12 @@ void ImageResource::responseReceived(const ResourceResponse& response, PassOwnPt
     }
 }
 
-void ImageResource::decodedSizeChanged(const blink::Image* image, int delta)
+void ImageResource::decodedSizeChangedTo(const blink::Image* image, size_t newsize)
 {
     if (!image || image != m_image)
         return;
 
-    setDecodedSize(decodedSize() + delta);
+    setDecodedSize(newsize);
 }
 
 void ImageResource::didDraw(const blink::Image* image)

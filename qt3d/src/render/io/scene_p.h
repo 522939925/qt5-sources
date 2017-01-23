@@ -52,6 +52,7 @@
 //
 
 #include <Qt3DRender/private/backendnode_p.h>
+#include <Qt3DRender/qsceneloader.h>
 #include <QtGlobal>
 #include <QUrl>
 
@@ -66,7 +67,7 @@ namespace Render {
 
 class SceneManager;
 
-class Scene : public BackendNode
+class Q_AUTOTEST_EXPORT Scene : public BackendNode
 {
 public:
     Scene();
@@ -75,6 +76,9 @@ public:
     QUrl source() const;
     void setSceneSubtree(Qt3DCore::QEntity *subTree);
     void setSceneManager(SceneManager *manager);
+
+    void cleanup();
+    void setStatus(QSceneLoader::Status status);
 
 private:
     void initializeFromPeer(const Qt3DCore::QNodeCreatedChangeBasePtr &change) Q_DECL_FINAL;

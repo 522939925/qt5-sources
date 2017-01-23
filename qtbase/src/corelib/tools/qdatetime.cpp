@@ -850,7 +850,7 @@ static QString toStringIsoDate(qint64 jd)
     range 0 to 9999. This restriction may apply to locale-aware
     formats as well, depending on the locale settings.
 
-    \sa shortDayName(), shortMonthName()
+    \sa fromString(), shortDayName(), shortMonthName(), QLocale::toString()
 */
 QString QDate::toString(Qt::DateFormat format) const
 {
@@ -926,7 +926,7 @@ QString QDate::toString(Qt::DateFormat format) const
 
     If the datetime is invalid, an empty string will be returned.
 
-    \sa QDateTime::toString(), QTime::toString(), QLocale::toString()
+    \sa fromString(), QDateTime::toString(), QTime::toString(), QLocale::toString()
 
 */
 QString QDate::toString(const QString& format) const
@@ -1206,6 +1206,8 @@ qint64 QDate::daysTo(const QDate &d) const
     Note for Qt::TextDate: It is recommended that you use the
     English short month names (e.g. "Jan"). Although localized month
     names can also be used, they depend on the user's locale settings.
+
+    \sa toString(), QLocale::toDate()
 */
 QDate QDate::fromString(const QString& string, Qt::DateFormat format)
 {
@@ -1324,8 +1326,8 @@ QDate QDate::fromString(const QString& string, Qt::DateFormat format)
 
     \snippet code/src_corelib_tools_qdatetime.cpp 3
 
-    \sa QDateTime::fromString(), QTime::fromString(), QDate::toString(),
-        QDateTime::toString(), QTime::toString()
+    \sa toString(), QDateTime::fromString(), QTime::fromString(),
+        QLocale::toDate()
 */
 
 QDate QDate::fromString(const QString &string, const QString &format)
@@ -1592,7 +1594,7 @@ int QTime::msec() const
 
     If the time is invalid, an empty string will be returned.
 
-    \sa QDate::toString(), QDateTime::toString()
+    \sa fromString(), QDate::toString(), QDateTime::toString(), QLocale::toString()
 */
 
 QString QTime::toString(Qt::DateFormat format) const
@@ -1665,7 +1667,7 @@ QString QTime::toString(Qt::DateFormat format) const
     If the time is invalid, an empty string will be returned.
     If \a format is empty, the default format "hh:mm:ss" is used.
 
-    \sa QDate::toString(), QDateTime::toString(), QLocale::toString()
+    \sa fromString(), QDate::toString(), QDateTime::toString(), QLocale::toString()
 */
 QString QTime::toString(const QString& format) const
 {
@@ -1950,6 +1952,8 @@ static QTime fromIsoTimeString(const QStringRef &string, Qt::DateFormat format, 
     this may result in two conversion attempts (if the conversion
     fails for the default locale). This should be considered an
     implementation detail.
+
+    \sa toString(), QLocale::toTime()
 */
 QTime QTime::fromString(const QString& string, Qt::DateFormat format)
 {
@@ -2023,8 +2027,8 @@ QTime QTime::fromString(const QString& string, Qt::DateFormat format)
 
     \snippet code/src_corelib_tools_qdatetime.cpp 8
 
-    \sa QDateTime::fromString(), QDate::fromString(), QDate::toString(),
-    QDateTime::toString(), QTime::toString()
+    \sa toString(), QDateTime::fromString(), QDate::fromString(),
+    QLocale::toTime()
 */
 
 QTime QTime::fromString(const QString &string, const QString &format)
@@ -2180,7 +2184,7 @@ static int qt_timezone()
         //   number of seconds west of UTC.
         // - It also takes DST into account, so we need to adjust it to always
         //   get the Standard Time offset.
-        return -t.tm_gmtoff + (t.tm_isdst ? SECS_PER_HOUR : 0L);
+        return -t.tm_gmtoff + (t.tm_isdst ? (long)SECS_PER_HOUR : 0L);
 #elif defined(Q_OS_INTEGRITY)
         return 0;
 #else
@@ -2721,7 +2725,7 @@ qint64 QDateTimePrivate::toMSecsSinceEpoch() const
 
     case Qt::TimeZone:
 #ifdef QT_BOOTSTRAPPED
-        break;
+        return 0;
 #else
         return zoneMSecsToEpochMSecs(m_msecs, m_timeZone);
 #endif
@@ -2906,9 +2910,8 @@ qint64 QDateTimePrivate::zoneMSecsToEpochMSecs(qint64 zoneMSecs, const QTimeZone
     QDateTime takes into account the system's time zone information
     when dealing with DST. On modern Unix systems, this means it
     applies the correct historical DST data whenever possible. On
-    Windows and Windows CE, where the system doesn't support
-    historical DST data, historical accuracy is not maintained with
-    respect to DST.
+    Windows, where the system doesn't support historical DST data,
+    historical accuracy is not maintained with respect to DST.
 
     The range of valid dates taking DST into account is 1970-01-01 to
     the present, and rules are in place for handling DST correctly
@@ -3543,7 +3546,8 @@ void QDateTime::setTime_t(uint secsSince1Jan1970UTC)
     range 0 to 9999. This restriction may apply to locale-aware
     formats as well, depending on the locale settings.
 
-    \sa QDate::toString(), QTime::toString(), Qt::DateFormat
+    \sa fromString(), QDate::toString(), QTime::toString(),
+    QLocale::toString()
 */
 
 QString QDateTime::toString(Qt::DateFormat format) const
@@ -3581,7 +3585,7 @@ QString QDateTime::toString(Qt::DateFormat format) const
                                                    .arg(tm.toString(Qt::TextDate))
                                                    .arg(dt.year());
         if (timeSpec() != Qt::LocalTime) {
-            buf += QStringLiteral(" GMT");
+            buf += QLatin1String(" GMT");
             if (d->m_spec == Qt::OffsetFromUTC)
                 buf += toOffsetString(Qt::TextDate, d->m_offsetFromUtc);
         }
@@ -3683,7 +3687,7 @@ QString QDateTime::toString(Qt::DateFormat format) const
 
     If the datetime is invalid, an empty string will be returned.
 
-    \sa QDate::toString(), QTime::toString(), QLocale::toString()
+    \sa fromString(), QDate::toString(), QTime::toString(), QLocale::toString()
 */
 QString QDateTime::toString(const QString& format) const
 {
@@ -4141,8 +4145,6 @@ QDateTime QDateTime::currentDateTimeUtc()
 
 qint64 QDateTime::currentMSecsSinceEpoch() Q_DECL_NOTHROW
 {
-    QDate d;
-    QTime t;
     SYSTEMTIME st;
     memset(&st, 0, sizeof(SYSTEMTIME));
     GetSystemTime(&st);
@@ -4381,6 +4383,8 @@ int QDateTime::utcOffset() const
     Note for Qt::TextDate: It is recommended that you use the
     English short month names (e.g. "Jan"). Although localized month
     names can also be used, they depend on the user's locale settings.
+
+    \sa toString(), QLocale::toDateTime()
 */
 QDateTime QDateTime::fromString(const QString& string, Qt::DateFormat format)
 {
@@ -4682,8 +4686,8 @@ QDateTime QDateTime::fromString(const QString& string, Qt::DateFormat format)
 
     \snippet code/src_corelib_tools_qdatetime.cpp 14
 
-    \sa QDate::fromString(), QTime::fromString(), QDate::toString(),
-    QDateTime::toString(), QTime::toString()
+    \sa toString(), QDate::fromString(), QTime::fromString(),
+    QLocale::toDateTime()
 */
 
 QDateTime QDateTime::fromString(const QString &string, const QString &format)
@@ -4784,7 +4788,12 @@ QDataStream &operator>>(QDataStream &in, QDate &date)
 
 QDataStream &operator<<(QDataStream &out, const QTime &time)
 {
-    return out << quint32(time.mds);
+    if (out.version() >= QDataStream::Qt_4_0) {
+        return out << quint32(time.mds);
+    } else {
+        // Qt3 had no support for reading -1, QTime() was valid and serialized as 0
+        return out << quint32(time.isNull() ? 0 : time.mds);
+    }
 }
 
 /*!
@@ -4799,7 +4808,12 @@ QDataStream &operator>>(QDataStream &in, QTime &time)
 {
     quint32 ds;
     in >> ds;
-    time.mds = int(ds);
+    if (in.version() >= QDataStream::Qt_4_0) {
+        time.mds = int(ds);
+    } else {
+        // Qt3 would write 0 for a null time
+        time.mds = (ds == 0) ? QTime::NullTime : int(ds);
+    }
     return in;
 }
 

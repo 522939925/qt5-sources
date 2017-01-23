@@ -41,6 +41,23 @@ class tst_QTransform : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void defaultConstruction()
+    {
+        // GIVEN
+        Qt3DCore::QTransform transform;
+
+        // THEN
+        QCOMPARE(transform.isShareable(), false);
+        QCOMPARE(transform.matrix(), QMatrix4x4());
+        QCOMPARE(transform.scale(), 1.0f);
+        QCOMPARE(transform.scale3D(), QVector3D(1.0f, 1.0f, 1.0f));
+        QCOMPARE(transform.rotation(), QQuaternion());
+        QCOMPARE(transform.rotationX(), 0.0f);
+        QCOMPARE(transform.rotationY(), 0.0f);
+        QCOMPARE(transform.rotationZ(), 0.0f);
+        QCOMPARE(transform.translation(), QVector3D(0.0f, 0.0f, 0.0f));
+    }
+
     void checkCloning_data()
     {
         QTest::addColumn<Qt3DCore::QTransform *>("transform");
@@ -49,15 +66,15 @@ private Q_SLOTS:
         QTest::newRow("defaultConstructed") << defaultConstructed;
 
         Qt3DCore::QTransform *matrixPropertySet = new Qt3DCore::QTransform();
-        matrixPropertySet->setMatrix(Qt3DCore::QTransform::rotateAround(QVector3D(0.1877, 0.6868, 0.3884), 45.0, QVector3D(0, 0, 1)));
+        matrixPropertySet->setMatrix(Qt3DCore::QTransform::rotateAround(QVector3D(0.1877f, 0.6868f, 0.3884f), 45.0f, QVector3D(0.0f, 0.0f, 1.0f)));
         QTest::newRow("matrixPropertySet") << matrixPropertySet;
 
         Qt3DCore::QTransform *translationSet = new Qt3DCore::QTransform();
-        translationSet->setTranslation(QVector3D(0.1877, 0.6868, 0.3884));
+        translationSet->setTranslation(QVector3D(0.1877f, 0.6868f, 0.3884f));
         QTest::newRow("translationSet") << translationSet;
 
         Qt3DCore::QTransform *scaleSet = new Qt3DCore::QTransform();
-        scaleSet->setScale3D(QVector3D(0.1, 0.6, 0.3));
+        scaleSet->setScale3D(QVector3D(0.1f, 0.6f, 0.3f));
         QTest::newRow("scaleSet") << scaleSet;
 
         Qt3DCore::QTransform *rotationSet = new Qt3DCore::QTransform();
@@ -309,7 +326,7 @@ private Q_SLOTS:
         // GIVEN
         Qt3DCore::QTransform t;
         Qt3DCore::QTransform t2;
-        QMatrix4x4 m = Qt3DCore::QTransform::rotateAround(QVector3D(0.1877, 0.6868, 0.3884), 45.0, QVector3D(0, 0, 1));
+        QMatrix4x4 m = Qt3DCore::QTransform::rotateAround(QVector3D(0.1877f, 0.6868f, 0.3884f), 45.0f, QVector3D(0.0f, 0.0f, 1.0f));
 
         // WHEN
         t.setMatrix(m);

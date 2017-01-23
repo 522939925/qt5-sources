@@ -296,7 +296,7 @@ QIconTheme::QIconTheme(const QString &themeName)
 {
     QFile themeIndex;
 
-    QStringList iconDirs = QIcon::themeSearchPaths();
+    const QStringList iconDirs = QIcon::themeSearchPaths();
     for ( int i = 0 ; i < iconDirs.size() ; ++i) {
         QDir iconDir(iconDirs[i]);
         QString themeDir = iconDir.path() + QLatin1Char('/') + themeName;
@@ -563,7 +563,7 @@ static bool directoryMatchesSize(const QIconDirInfo &dir, int iconsize)
         return dir.size == iconsize;
 
     } else if (dir.type == QIconDirInfo::Scalable) {
-        return dir.size <= dir.maxSize &&
+        return iconsize <= dir.maxSize &&
                 iconsize >= dir.minSize;
 
     } else if (dir.type == QIconDirInfo::Threshold) {

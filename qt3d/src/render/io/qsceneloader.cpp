@@ -51,22 +51,36 @@ using namespace Qt3DCore;
 
 namespace Qt3DRender {
 
-QSceneLoaderPrivate::QSceneLoaderPrivate()
-    : QComponentPrivate()
-    , m_status(QSceneLoader::Loading)
-    , m_subTreeRoot(nullptr)
-{
-    m_shareable = false;
-}
-
 /*!
-  \class Qt3DRender::QSceneLoader
-  \inmodule Qt3DRender
-  \since 5.7
-  \ingroup io
+    \class Qt3DRender::QSceneLoader
+    \inmodule Qt3DRender
+    \since 5.7
+    \ingroup io
 
-  \brief Provides the facility to load an existing Scene
+    \brief Provides the facility to load an existing Scene
 
+    Given a 3D source file, the Qt3DRender::QSceneLoader will try to parse it and
+    build a tree of Qt3DCore::QEntity objects with proper Qt3DRender::QGeometryRenderer,
+    Qt3DCore::QTransform and Qt3DRender::QMaterial components.
+
+    The loader will try to determine the best material to be used based on the properties
+    of the model file. If you wish to use a custom material, you will have to traverse
+    the tree and replace the default associated materials with yours.
+
+    As the name implies, Qt3DRender::QSceneLoader loads a complete scene subtree.
+    If you wish to load a single piece of geometry, you should rather use
+    the Qt3DRender::QMesh instead.
+
+    Qt3DRender::QSceneLoader internally relies on the use of plugins to support a
+    wide variety of 3D file formats. \l
+    {http://www.assimp.org/main_features_formats.html}{Here} is a list of formats
+    that are supported by Qt3D.
+
+    \note this component shouldn't be shared among several Qt3DCore::QEntity instances.
+    Undefined behavior will result.
+
+    \sa Qt3DRender::QMesh
+    \sa Qt3DRender::QGeometryRenderer
  */
 
 /*!
@@ -75,21 +89,93 @@ QSceneLoaderPrivate::QSceneLoaderPrivate()
     \instantiates Qt3DRender::QSceneLoader
     \inherits Component
     \since 5.7
-    \qmlabstract Provides the facility to load an existing Scene
-*/
+    \brief Provides the facility to load an existing Scene
+
+    Given a 3D source file, the SceneLoader will try to parse it and build a
+    tree of Entity objects with proper GeometryRenderer, Transform and Material
+    components.
+
+    The loader will try to determine the best material to be used based on the
+    properties of the model file. If you wish to use a custom material, you
+    will have to traverse the tree and replace the default associated materials
+    with yours.
+
+    As the name implies, SceneLoader loads a complete scene subtree. If you
+    wish to load a single piece of geometry, you should rather use the
+    Mesh instead.
+
+    SceneLoader internally relies on the use of plugins to support a wide
+    variety of 3D file formats. \l
+    {http://www.assimp.org/main_features_formats.html}{Here} is a list of
+    formats that are supported by Qt3D.
+
+    \note this component shouldn't be shared among several Entity instances.
+    Undefined behavior will result.
+
+    \sa Mesh
+    \sa GeometryRenderer
+ */
 
 /*!
     \enum QSceneLoader::Status
 
     This enum identifies the state of loading
-    \value None
-    \value Loading
-    \value Ready
-    \value Error
-*/
+    \value None     The Qt3DRender::QSceneLoader hasn't been used yet.
+    \value Loading  The Qt3DRender::QSceneLoader is currently loading the scene file.
+    \value Ready    The Qt3DRender::QSceneLoader successfully loaded the scene file.
+    \value Error    The Qt3DRender::QSceneLoader encountered an error while loading the scene file.
+ */
 
 /*!
-  The constructor creates an instance with the specified \a parent.
+    \qmlproperty url SceneLoader::source
+
+    Holds the url to the source to be loaded.
+ */
+
+/*!
+    \qmlproperty enumeration SceneLoader::status
+
+    Holds the status of scene loading.
+    \list
+    \li SceneLoader.None
+    \li SceneLoader.Loading
+    \li SceneLoader.Ready
+    \li SceneLoader.Error
+    \endlist
+    \sa Qt3DRender::QSceneLoader::Status
+    \readonly
+ */
+
+/*!
+    \property QSceneLoader::source
+
+    Holds the url to the source to be loaded.
+ */
+
+/*!
+    \property QSceneLoader::status
+
+    Holds the status of scene loading.
+    \list
+    \li SceneLoader.None
+    \li SceneLoader.Loading
+    \li SceneLoader.Ready
+    \li SceneLoader.Error
+    \endlist
+    \sa Qt3DRender::QSceneLoader::Status
+ */
+
+/*! \internal */
+QSceneLoaderPrivate::QSceneLoaderPrivate()
+    : QComponentPrivate()
+    , m_status(QSceneLoader::None)
+    , m_subTreeRoot(nullptr)
+{
+    m_shareable = false;
+}
+
+/*!
+    The constructor creates an instance with the specified \a parent.
  */
 QSceneLoader::QSceneLoader(QNode *parent)
     : Qt3DCore::QComponent(*new QSceneLoaderPrivate, parent)
@@ -132,9 +218,8 @@ void QSceneLoader::sceneChangeEvent(const Qt3DCore::QSceneChangePtr &change)
                 subTreeRoot->setParent(parentEntity);
                 d->m_subTreeRoot = subTreeRoot;
             }
-
-            // Update status property
-            setStatus(subTreeRoot ? QSceneLoader::Ready : QSceneLoader::Error);
+        } else if (e->propertyName() == QByteArrayLiteral("status")) {
+            setStatus(e->value().value<QSceneLoader::Status>());
         }
     }
 }
@@ -145,15 +230,6 @@ QUrl QSceneLoader::source() const
     return d->m_source;
 }
 
-/*!
-    \property Qt3DRender::QSceneLoader::source
-    Specifies the url for the source to be loaded.
-*/
-
-/*!
-  \qmlproperty QUrl Qt3D.Render::SceneLoader::source
-
-*/
 void QSceneLoader::setSource(const QUrl &arg)
 {
     Q_D(QSceneLoader);
@@ -163,15 +239,6 @@ void QSceneLoader::setSource(const QUrl &arg)
     }
 }
 
-/*!
-    \property Qt3DRender::QSceneLoader::status
-    Indicates the status of scene loading.
-*/
-
-/*!
-  \qmlproperty Status Qt3D.Render::SceneLoader::status
-
-*/
 QSceneLoader::Status QSceneLoader::status() const
 {
     Q_D(const QSceneLoader);
@@ -184,7 +251,9 @@ void QSceneLoader::setStatus(QSceneLoader::Status status)
     Q_D(QSceneLoader);
     if (d->m_status != status) {
         d->m_status = status;
+        const bool wasBlocked = blockNotifications(true);
         emit statusChanged(status);
+        blockNotifications(wasBlocked);
     }
 }
 

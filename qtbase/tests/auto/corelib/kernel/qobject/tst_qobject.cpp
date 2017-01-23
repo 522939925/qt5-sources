@@ -129,11 +129,13 @@ private slots:
     void returnValue2_data();
     void returnValue2();
     void connectVirtualSlots();
+    void connectSlotsVMIClass();  // VMI = Virtual or Multiple Inheritance
     void connectPrivateSlots();
     void connectFunctorArgDifference();
     void connectFunctorOverloads();
     void connectFunctorQueued();
     void connectFunctorWithContext();
+    void connectFunctorWithContextUnique();
     void connectFunctorDeadlock();
     void connectStaticSlotWithObject();
     void disconnectDoesNotLeakFunctor();
@@ -5606,6 +5608,112 @@ void tst_QObject::connectVirtualSlots()
     */
 }
 
+struct VirtualBase
+{
+    int virtual_base_count;
+    VirtualBase() : virtual_base_count(0) {}
+    virtual ~VirtualBase() {}
+    virtual void slot2() = 0;
+};
+
+class ObjectWithVirtualBase : public VirtualSlotsObject, public virtual VirtualBase
+{
+    Q_OBJECT
+public:
+    ObjectWithVirtualBase() : regular_call_count(0), derived_counter2(0) {}
+    int regular_call_count;
+    int derived_counter2;
+
+public slots:
+    void regularSlot() { ++regular_call_count; }
+    virtual void slot1() { ++derived_counter2; }
+    virtual void slot2() { ++virtual_base_count; }
+};
+
+// VMI = Virtual or Multiple Inheritance
+// (in this case, both)
+void tst_QObject::connectSlotsVMIClass()
+{
+    // test connecting by the base
+    {
+        ObjectWithVirtualBase obj;
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1, Qt::UniqueConnection));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 1);
+        QCOMPARE(obj.virtual_base_count, 0);
+
+        QVERIFY(QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1));
+        QVERIFY(!QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 1);
+        QCOMPARE(obj.virtual_base_count, 0);
+    }
+
+    // test connecting with the actual class
+    {
+        ObjectWithVirtualBase obj;
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::regularSlot, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::regularSlot, Qt::UniqueConnection));
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1, Qt::UniqueConnection));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 1);
+        QCOMPARE(obj.regular_call_count, 1);
+        QCOMPARE(obj.virtual_base_count, 0);
+
+        QVERIFY( QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::regularSlot));
+        QVERIFY(!QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::regularSlot));
+        QVERIFY( QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1));
+        QVERIFY(!QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 1);
+        QCOMPARE(obj.regular_call_count, 1);
+        QCOMPARE(obj.virtual_base_count, 0);
+
+        /* the C++ standard say the comparison between pointer to virtual member function is unspecified
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &VirtualSlotsObjectBase::slot1, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot1, Qt::UniqueConnection));
+        */
+    }
+
+    // test connecting a slot that is virtual from the virtual base
+    {
+        ObjectWithVirtualBase obj;
+        QVERIFY( QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot2, Qt::UniqueConnection));
+        QVERIFY(!QObject::connect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot2, Qt::UniqueConnection));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 0);
+        QCOMPARE(obj.virtual_base_count, 1);
+        QCOMPARE(obj.regular_call_count, 0);
+
+        QVERIFY( QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot2));
+        QVERIFY(!QObject::disconnect(&obj, &VirtualSlotsObjectBase::signal1, &obj, &ObjectWithVirtualBase::slot2));
+
+        emit obj.signal1();
+        QCOMPARE(obj.base_counter1, 0);
+        QCOMPARE(obj.derived_counter1, 0);
+        QCOMPARE(obj.derived_counter2, 0);
+        QCOMPARE(obj.virtual_base_count, 1);
+        QCOMPARE(obj.regular_call_count, 0);
+    }
+}
+
 #ifndef QT_BUILD_INTERNAL
 void tst_QObject::connectPrivateSlots()
 {QSKIP("Needs QT_BUILD_INTERNAL");}
@@ -5890,6 +5998,22 @@ void tst_QObject::deleteLaterInAboutToBlockHandler()
     e.exec();
     QCOMPARE(statusAwake, 2);
     QCOMPARE(statusAboutToBlock, 2);
+}
+
+void tst_QObject::connectFunctorWithContextUnique()
+{
+    // Qt::UniqueConnections currently don't work for functors, but we need to
+    // be sure that they don't crash. If that is implemented, change this test.
+
+    SenderObject sender;
+    ReceiverObject receiver;
+    QObject::connect(&sender, &SenderObject::signal1, &receiver, &ReceiverObject::slot1);
+    receiver.count_slot1 = 0;
+
+    QObject::connect(&sender, &SenderObject::signal1, &receiver, SlotFunctor(), Qt::UniqueConnection);
+
+    sender.emitSignal1();
+    QCOMPARE(receiver.count_slot1, 1);
 }
 
 class MyFunctor
@@ -6408,6 +6532,29 @@ signals:
     CountedStruct mySignal(const CountedStruct &s1, CountedStruct s2);
 };
 
+class CountedExceptionThrower : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit CountedExceptionThrower(bool throwException, QObject *parent = Q_NULLPTR)
+        : QObject(parent)
+    {
+        if (throwException)
+            throw ObjectException();
+        ++counter;
+    }
+
+    ~CountedExceptionThrower()
+    {
+        --counter;
+    }
+
+    static int counter;
+};
+
+int CountedExceptionThrower::counter = 0;
+
 void tst_QObject::exceptions()
 {
 #ifndef QT_NO_EXCEPTIONS
@@ -6469,6 +6616,59 @@ void tst_QObject::exceptions()
     }
     QCOMPARE(countedStructObjectsCount, 0);
 
+    // Child object reaping in case of exceptions thrown by constructors
+    {
+        QCOMPARE(CountedExceptionThrower::counter, 0);
+
+        try {
+            class ParentObject : public QObject {
+            public:
+                explicit ParentObject(QObject *parent = Q_NULLPTR)
+                    : QObject(parent)
+                {
+                    new CountedExceptionThrower(false, this);
+                    new CountedExceptionThrower(false, this);
+                    new CountedExceptionThrower(true, this); // throws
+                }
+            };
+
+            ParentObject p;
+            QFAIL("Exception not thrown");
+        } catch (const ObjectException &) {
+        } catch (...) {
+            QFAIL("Wrong exception thrown");
+        }
+
+        QCOMPARE(CountedExceptionThrower::counter, 0);
+
+        try {
+            QObject o;
+            new CountedExceptionThrower(false, &o);
+            new CountedExceptionThrower(false, &o);
+            new CountedExceptionThrower(true, &o); // throws
+
+            QFAIL("Exception not thrown");
+        } catch (const ObjectException &) {
+        } catch (...) {
+            QFAIL("Wrong exception thrown");
+        }
+
+        QCOMPARE(CountedExceptionThrower::counter, 0);
+
+        try {
+            QObject o;
+            CountedExceptionThrower c1(false, &o);
+            CountedExceptionThrower c2(false, &o);
+            CountedExceptionThrower c3(true, &o); // throws
+
+            QFAIL("Exception not thrown");
+        } catch (const ObjectException &) {
+        } catch (...) {
+            QFAIL("Wrong exception thrown");
+        }
+
+        QCOMPARE(CountedExceptionThrower::counter, 0);
+    }
 
 #else
     QSKIP("Needs exceptions");

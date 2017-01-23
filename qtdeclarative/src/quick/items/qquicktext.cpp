@@ -897,11 +897,11 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
 
             // If the width of the item has changed and it's possible the result of wrapping,
             // eliding, scaling has changed, or the text is not left aligned do another layout.
-            if ((lineWidth < qMin(oldWidth, naturalWidth) || (widthExceeded && lineWidth > oldWidth))
+            if ((!qFuzzyCompare(lineWidth, oldWidth) || (widthExceeded && lineWidth > oldWidth))
                     && (singlelineElide || multilineElide || canWrap || horizontalFit
                         || q->effectiveHAlign() != QQuickText::AlignLeft)) {
                 widthChanged = true;
-                widthExceeded = false;
+                widthExceeded = lineWidth >= qMin(oldWidth, naturalWidth);
                 heightExceeded = false;
                 continue;
             }
@@ -936,7 +936,7 @@ QRectF QQuickTextPrivate::setupTextLayout(qreal *const baseline)
 
             bool wasInLayout = internalWidthUpdate;
             internalWidthUpdate = true;
-            q->setImplicitHeight(naturalHeight);
+            q->setImplicitHeight(naturalHeight + q->topPadding() + q->bottomPadding());
             internalWidthUpdate = wasInLayout;
 
             multilineElide = elideMode == QQuickText::ElideRight
@@ -1153,7 +1153,10 @@ void QQuickTextPrivate::setLineGeometry(QTextLine &line, qreal lineWidth, qreal 
 
     foreach (QQuickStyledTextImgTag *image, imagesInLine) {
         totalLineHeight = qMax(totalLineHeight, textTop + image->pos.y() + image->size.height());
-        image->pos.setX(line.cursorToX(image->position));
+        const int leadX = line.cursorToX(image->position);
+        const int trailX = line.cursorToX(image->position, QTextLine::Trailing);
+        const bool rtl = trailX < leadX;
+        image->pos.setX(leadX + (rtl ? (-image->offset - image->size.width()) : image->offset));
         image->pos.setY(image->pos.y() + height + textTop);
         extra->visibleImgTags << image;
     }
@@ -2025,6 +2028,7 @@ void QQuickText::setTextFormat(TextFormat format)
     }
     d->updateLayout();
     setAcceptHoverEvents(d->richText || d->styledText);
+    setAcceptedMouseButtons(d->richText || d->styledText ? Qt::LeftButton : Qt::NoButton);
 
     emit textFormatChanged(d->format);
 }

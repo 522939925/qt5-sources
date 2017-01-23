@@ -318,7 +318,7 @@ static bool findPatternUnloaded(const QString &library, QLibraryPrivate *lib)
     }
 
     if (!ret && lib)
-        lib->errorString = QLibrary::tr("Plugin verification data mismatch in '%1'").arg(library);
+        lib->errorString = QLibrary::tr("Failed to extract plugin meta data from '%1'").arg(library);
     file.close();
     return ret;
 }
@@ -536,8 +536,13 @@ bool QLibraryPrivate::load()
         return false;
 
     bool ret = load_sys();
-    if (qt_debug_component())
-        qDebug() << "loaded library" << fileName;
+    if (qt_debug_component()) {
+        if (ret) {
+            qDebug() << "loaded library" << fileName;
+        } else {
+            qDebug() << qUtf8Printable(errorString);
+        }
+    }
     if (ret) {
         //when loading a library we add a reference to it so that the QLibraryPrivate won't get deleted
         //this allows to unload the library at a later time
@@ -603,7 +608,7 @@ bool QLibraryPrivate::loadPlugin()
     \row \li Unix/Linux  \li \c .so
     \row \li AIX  \li \c .a
     \row \li HP-UX       \li \c .sl, \c .so (HP-UXi)
-    \row \li OS X and iOS   \li \c .dylib, \c .bundle, \c .so
+    \row \li \macos and iOS   \li \c .dylib, \c .bundle, \c .so
     \endtable
 
     Trailing versioning numbers on Unix are ignored.
@@ -840,7 +845,7 @@ QLibrary::QLibrary(QObject *parent)
     We recommend omitting the file's suffix in \a fileName, since
     QLibrary will automatically look for the file with the appropriate
     suffix in accordance with the platform, e.g. ".so" on Unix,
-    ".dylib" on OS X and iOS, and ".dll" on Windows. (See \l{fileName}.)
+    ".dylib" on \macos and iOS, and ".dll" on Windows. (See \l{fileName}.)
  */
 QLibrary::QLibrary(const QString& fileName, QObject *parent)
     :QObject(parent), d(0), did_load(false)
@@ -857,7 +862,7 @@ QLibrary::QLibrary(const QString& fileName, QObject *parent)
     We recommend omitting the file's suffix in \a fileName, since
     QLibrary will automatically look for the file with the appropriate
     suffix in accordance with the platform, e.g. ".so" on Unix,
-    ".dylib" on OS X and iOS, and ".dll" on Windows. (See \l{fileName}.)
+    ".dylib" on \macos and iOS, and ".dll" on Windows. (See \l{fileName}.)
 */
 QLibrary::QLibrary(const QString& fileName, int verNum, QObject *parent)
     :QObject(parent), d(0), did_load(false)
@@ -873,7 +878,7 @@ QLibrary::QLibrary(const QString& fileName, int verNum, QObject *parent)
     We recommend omitting the file's suffix in \a fileName, since
     QLibrary will automatically look for the file with the appropriate
     suffix in accordance with the platform, e.g. ".so" on Unix,
-    ".dylib" on OS X and iOS, and ".dll" on Windows. (See \l{fileName}.)
+    ".dylib" on \macos and iOS, and ".dll" on Windows. (See \l{fileName}.)
  */
 QLibrary::QLibrary(const QString& fileName, const QString &version, QObject *parent)
     :QObject(parent), d(0), did_load(false)

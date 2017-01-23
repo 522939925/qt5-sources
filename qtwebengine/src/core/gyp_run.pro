@@ -19,6 +19,8 @@ cross_compile {
 GYP_CONFIG += qtwe_process_name_debug=$$QTWEBENGINEPROCESS_NAME_DEBUG
 GYP_CONFIG += qtwe_process_name_release=$$QTWEBENGINEPROCESS_NAME_RELEASE
 GYP_CONFIG += disable_glibcxx_debug=1
+!contains(QT_CONFIG, no-pkg-config): GYP_ARGS += "-D pkg-config=\"$$pkgConfigExecutable()\""
+
 !webcore_debug: GYP_CONFIG += remove_webcore_debug_symbols=1
 !v8base_debug: GYP_CONFIG += remove_v8base_debug_symbols=1
 
@@ -34,6 +36,7 @@ force_debug_info {
 # Copy this logic from qt_module.prf so that ninja can run according
 # to the same rules as the final module linking in core_module.pro.
 !host_build:if(win32|mac):!macx-xcode {
+    contains(QT_CONFIG, simulator_and_device): CONFIG += simulator_and_device
     contains(QT_CONFIG, debug_and_release):CONFIG += debug_and_release
     contains(QT_CONFIG, build_all):CONFIG += build_all
 }
@@ -76,20 +79,32 @@ contains(QT_ARCH, "arm") {
         # If the toolchain does not explicitly specify to use NEON instructions
         # we use arm_neon_optional for ARMv7 and newer and let chromium decide
         # about the mfpu option.
-        contains(MFPU, "neon")|contains(MFPU, "neon-vfpv4"): GYP_CONFIG += arm_fpu=\"$$MFPU\" arm_neon=1
+        contains(MFPU, ".*neon.*"): GYP_CONFIG += arm_fpu=\"$$MFPU\" arm_neon=1
         else:!lessThan(MARMV, 7): GYP_CONFIG += arm_neon=0 arm_neon_optional=1
         else: GYP_CONFIG += arm_fpu=\"$$MFPU\" arm_neon=0 arm_neon_optional=0
+    } else {
+        # Chromium defaults to arm_neon=1, Qt does not.
+        GYP_CONFIG += arm_neon=0
+        !lessThan(MARMV, 7): GYP_CONFIG += arm_neon_optional=1
     }
 
+    contains(QMAKE_CFLAGS, "-marm"): GYP_CONFIG += arm_thumb=0
     contains(QMAKE_CFLAGS, "-mthumb"): GYP_CONFIG += arm_thumb=1
 }
 
 contains(QT_ARCH, "mips") {
     GYP_CONFIG += target_arch=mipsel
 
-    contains(QMAKE_CFLAGS, "mips32r6"): mips_arch_variant=\"r6\"
-    else: contains(QMAKE_CFLAGS, "mips32r2"): mips_arch_variant=\"r2\"
-    else: contains(QMAKE_CFLAGS, "mips32"): mips_arch_variant=\"r1\"
+    MARCH = $$extractCFlag("-march=.*")
+    !isEmpty(MARCH) {
+        equals(MARCH, "mips32r6"): GYP_CONFIG += mips_arch_variant=\"r6\"
+        else: equals(MARCH, "mips32r2"): GYP_CONFIG += mips_arch_variant=\"r2\"
+        else: equals(MARCH, "mips32"): GYP_CONFIG += mips_arch_variant=\"r1\"
+    } else {
+        contains(QMAKE_CFLAGS, "mips32r6"): GYP_CONFIG += mips_arch_variant=\"r6\"
+        else: contains(QMAKE_CFLAGS, "mips32r2"): GYP_CONFIG += mips_arch_variant=\"r2\"
+        else: contains(QMAKE_CFLAGS, "mips32"): GYP_CONFIG += mips_arch_variant=\"r1\"
+    }
 
     contains(QMAKE_CFLAGS, "-mdsp2"): GYP_CONFIG += mips_dsp_rev=2
     else: contains(QMAKE_CFLAGS, "-mdsp"): GYP_CONFIG += mips_dsp_rev=1
@@ -124,7 +139,7 @@ contains(WEBENGINE_CONFIG, no_spellcheck): {
 for (config, GYP_CONFIG): GYP_ARGS += "-D $$config"
 
 !build_pass {
-    message("Running gyp_qtwebengine \"$$OUT_PWD\" $${GYP_ARGS}...")
+    message("Running gyp_qtwebengine \"$$OUT_PWD\" $${GYP_ARGS}.")
     !system("python $$QTWEBENGINE_ROOT/tools/buildscripts/gyp_qtwebengine \"$$OUT_PWD\" $${GYP_ARGS}"): error("-- running gyp_qtwebengine failed --")
 }
 

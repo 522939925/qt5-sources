@@ -47,8 +47,10 @@ T.ScrollBar {
                              contentItem.implicitHeight + topPadding + bottomPadding)
 
     padding: 2
+    topPadding: padding + (control.orientation === Qt.Horizontal ? 12 : 0)
+    leftPadding: padding + (control.orientation === Qt.Vertical && !control.mirrored ? 12 : 0)
+    rightPadding: padding + (control.orientation === Qt.Vertical && control.mirrored ? 12 : 0)
 
-    //! [contentItem]
     contentItem: Rectangle {
         id: handle
 
@@ -73,5 +75,4 @@ T.ScrollBar {
             }
         }
     }
-    //! [contentItem]
 }

@@ -60,6 +60,14 @@
 #include "qhandle_p.h"
 #include "qhandlemanager_p.h"
 
+// Silence complaints about unreferenced local variables in
+// ArrayAllocatingPolicy::deallocateBuckets() when the compiler
+// inlines the call to the dtor and it is empty. Default warning
+// setting re-enabled at bottom of this file
+#if defined(Q_CC_MSVC)
+#pragma warning(disable : 4189)
+#endif
+
 QT_BEGIN_NAMESPACE
 
 namespace Qt3DCore {
@@ -411,6 +419,7 @@ public:
     {
         typename LockingPolicy<QResourceManager>::WriteLocker lock(this);
         QHandle<ValueType, INDEXBITS> handle = m_handleManager.acquire(AllocatingPolicy<ValueType, INDEXBITS>::allocateResource());
+        m_activeHandles.push_back(handle);
         return handle;
     }
 
@@ -431,6 +440,7 @@ public:
     {
         typename LockingPolicy<QResourceManager>::WriteLocker lock(this);
         m_handleManager.reset();
+        m_activeHandles.clear();
         AllocatingPolicy<ValueType, INDEXBITS>::reset();
     }
 
@@ -449,8 +459,10 @@ public:
             typename LockingPolicy<QResourceManager>::WriteLocker writeLock(this);
             // Test that the handle hasn't been set (in the meantime between the read unlock and the write lock)
             QHandle<ValueType, INDEXBITS> &handleToSet = m_keyToHandleMap[id];
-            if (handleToSet.isNull())
+            if (handleToSet.isNull()) {
                 handleToSet = m_handleManager.acquire(AllocatingPolicy<ValueType, INDEXBITS>::allocateResource());
+                m_activeHandles.push_back(handleToSet);
+            }
             return handleToSet;
         }
         return handle;
@@ -493,9 +505,12 @@ public:
 
     int count() const Q_DECL_NOEXCEPT { return m_handleManager.activeEntries(); }
 
+    inline QVector<QHandle<ValueType, INDEXBITS> > activeHandles() const Q_DECL_NOEXCEPT { return m_activeHandles; }
+
 protected:
     QHandleManager<ValueType, INDEXBITS> m_handleManager;
     QHash<KeyType, QHandle<ValueType, INDEXBITS> > m_keyToHandleMap;
+    QVector<QHandle<ValueType, INDEXBITS> > m_activeHandles;
     const int m_maxSize;
 
 private:
@@ -503,6 +518,7 @@ private:
     {
         ValueType *val = m_handleManager.data(handle);
         m_handleManager.release(handle);
+        m_activeHandles.removeOne(handle);
         AllocatingPolicy<ValueType, INDEXBITS>::releaseResource(val);
     }
 
@@ -533,5 +549,9 @@ QDebug operator<<(QDebug dbg, const QResourceManager<ValueType, KeyType, INDEXBI
 }// Qt3D
 
 QT_END_NAMESPACE
+
+#if defined(Q_CC_MSVC)
+#pragma warning(default : 4189)
+#endif
 
 #endif // QT3DCORE_QABSTRACTRESOURCESMANAGER_H

@@ -603,7 +603,7 @@ int HtmlGenerator::generateAtom(const Atom *atom, const Node *relative, CodeMark
         out() << "<p>For example, if you have code like</p>\n";
         // fallthrough
     case Atom::CodeBad:
-        out() << "<pre class=\"cpp\">"
+        out() << "<pre class=\"cpp plain\">"
               << trimmedTrailing(protectEnc(plainCode(indent(codeIndent,atom->string()))), codePrefix, codeSuffix)
               << "</pre>\n";
         break;
@@ -1934,6 +1934,19 @@ void HtmlGenerator::generateNavigationBar(const QString &title,
                           << Atom(Atom::FormattingRight, ATOM_FORMATTING_LINK)
                           << Atom(itemRight);
 
+        } else if (node->isAggregate()) {
+            QStringList groups = static_cast<const Aggregate*>(node)->groupNames();
+            if (groups.length() == 1) {
+                const Node *groupNode = qdb_->findNodeByNameAndType(QStringList(groups[0]), Node::Group);
+                if (groupNode && !groupNode->title().isEmpty()) {
+                    navigationbar << Atom(itemLeft)
+                                  << Atom(Atom::NavLink, groupNode->name())
+                                  << Atom(Atom::FormattingLeft, ATOM_FORMATTING_LINK)
+                                  << Atom(Atom::String, groupNode->title())
+                                  << Atom(Atom::FormattingRight, ATOM_FORMATTING_LINK)
+                                  << Atom(itemRight);
+                }
+            }
         }
         navigationbar << Atom(itemLeft)
                       << Atom(Atom::String, title)
@@ -2360,7 +2373,7 @@ void HtmlGenerator::generateQmlRequisites(QmlTypeNode *qcn, CodeMarker *marker)
 
     //add the inherited-by to the map
     NodeList subs;
-    QmlTypeNode::subclasses(qcn->name(), subs);
+    QmlTypeNode::subclasses(qcn, subs);
     if (!subs.isEmpty()) {
         text.clear();
         text << Atom::ParaLeft;
@@ -2886,6 +2899,8 @@ void HtmlGenerator::generateAnnotatedList(const Node *relative,
     out() << "<div class=\"table\"><table class=\"annotated\">\n";
     int row = 0;
     NodeList nodes = nmm.values();
+    std::sort(nodes.begin(), nodes.end(), Node::nodeNameLessThan);
+
     foreach (const Node* node, nodes) {
         if (++row % 2 == 1)
             out() << "<tr class=\"odd topAlign\">";
@@ -4599,7 +4614,9 @@ void HtmlGenerator::generateManifestFile(const QString &manifest, const QString 
         if (!tags.isEmpty()) {
             writer.writeStartElement("tags");
             bool wrote_one = false;
-            foreach (const QString &tag, tags) {
+            QStringList sortedTags = tags.toList();
+            sortedTags.sort();
+            foreach (const QString &tag, sortedTags) {
                 if (wrote_one)
                     writer.writeCharacters(",");
                 writer.writeCharacters(tag);
@@ -4902,7 +4919,9 @@ void HtmlGenerator::generateAssociatedPropertyNotes(const FunctionNode* fn)
 {
     if (fn->hasAssociatedProperties()) {
         out() << "<p><b>Note:</b> ";
-        foreach (const PropertyNode* pn, fn->associatedProperties()) {
+        PropNodeList propertyNodes = fn->associatedProperties();
+        std::sort(propertyNodes.begin(), propertyNodes.end(), Node::nodeNameLessThan);
+        foreach (const PropertyNode* pn, propertyNodes) {
             QString msg;
             switch (pn->role(fn)) {
             case PropertyNode::Getter:

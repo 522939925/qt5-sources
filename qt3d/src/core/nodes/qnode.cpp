@@ -54,6 +54,7 @@
 #include <QChildEvent>
 #include <QMetaObject>
 #include <QMetaProperty>
+#include <QtCore/private/qmetaobject_p.h>
 #include <Qt3DCore/QComponent>
 #include <Qt3DCore/private/corelogging_p.h>
 #include <Qt3DCore/private/qnodecreatedchangegenerator_p.h>
@@ -139,7 +140,7 @@ void QNodePrivate::notifyDestructionChangesAndRemoveFromScene()
 {
     Q_Q(QNode);
 
-//    // We notify the backend that the parent lost us as a child
+    // We notify the backend that the parent lost us as a child
     if (m_changeArbiter != nullptr && !m_parentId.isNull()) {
         const auto change = QPropertyNodeRemovedChangePtr::create(m_parentId, q);
         change->setPropertyName("children");
@@ -274,7 +275,7 @@ void QNodePrivate::_q_setParentHelper(QNode *parent)
 
     // If we had a parent, we let him know that we are about to change
     // parent
-    if (oldParentNode) {
+    if (oldParentNode && m_hasBackendNode) {
         QNodePrivate::get(oldParentNode)->_q_removeChild(q);
 
         // If we have an old parent but the new parent is null
@@ -791,6 +792,48 @@ QNodeCreatedChangeBasePtr QNode::createNodeCreationChange() const
     // const QMetaObject *mo = metaObject();
     // qDebug() << Q_FUNC_INFO << mo->className();
     return QNodeCreatedChangeBasePtr::create(this);
+}
+
+namespace {
+
+/*! \internal */
+inline const QMetaObjectPrivate *priv(const uint* data)
+{
+    return reinterpret_cast<const QMetaObjectPrivate*>(data);
+}
+
+/*! \internal */
+inline bool isDynamicMetaObject(const QMetaObject *mo)
+{
+    return (priv(mo->d.data)->flags & DynamicMetaObject);
+}
+
+} // anonymous
+
+/*!
+ * \internal
+ *
+ * Find the most derived metaobject that doesn't have a dynamic
+ * metaobject farther up the chain.
+ * TODO: Add support to QMetaObject to explicitly say if it's a dynamic
+ * or static metaobject so we don't need this logic
+ */
+const QMetaObject *QNodePrivate::findStaticMetaObject(const QMetaObject *metaObject)
+{
+    const QMetaObject *lastStaticMetaobject = nullptr;
+    auto mo = metaObject;
+    while (mo) {
+        const bool dynamicMetaObject = isDynamicMetaObject(mo);
+        if (dynamicMetaObject)
+            lastStaticMetaobject = nullptr;
+
+        if (!dynamicMetaObject && !lastStaticMetaobject)
+            lastStaticMetaobject = mo;
+
+        mo = mo->superClass();
+    }
+    Q_ASSERT(lastStaticMetaobject);
+    return lastStaticMetaobject;
 }
 
 } // namespace Qt3DCore

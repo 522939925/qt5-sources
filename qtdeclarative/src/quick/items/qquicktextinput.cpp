@@ -84,7 +84,7 @@ DEFINE_BOOL_CONFIG_OPTION(qmlDisableDistanceField, QML_DISABLE_DISTANCEFIELD)
     and setting \l echoMode to an appropriate value enables TextInput to be used for
     a password input field.
 
-    On OS X, the Up/Down key bindings for Home/End are explicitly disabled.
+    On \macos, the Up/Down key bindings for Home/End are explicitly disabled.
     If you want such bindings (on any platform), you will need to construct them in QML.
 
     \sa TextEdit, Text
@@ -1003,6 +1003,7 @@ void QQuickTextInput::q_validatorChanged()
 
 QRectF QQuickTextInputPrivate::anchorRectangle() const
 {
+    Q_Q(const QQuickTextInput);
     QRectF rect;
     int a;
     // Unfortunately we cannot use selectionStart() and selectionEnd()
@@ -1023,8 +1024,8 @@ QRectF QQuickTextInputPrivate::anchorRectangle() const
             a = 0;
         QTextLine l = m_textLayout.lineForTextPosition(a);
         if (l.isValid()) {
-            qreal x = l.cursorToX(a) - hscroll;
-            qreal y = l.y() - vscroll;
+            qreal x = l.cursorToX(a) - hscroll + q->leftPadding();
+            qreal y = l.y() - vscroll + q->topPadding();
             rect.setRect(x, y, 1, l.height());
         }
     }
@@ -2915,7 +2916,7 @@ void QQuickTextInputPrivate::updateLayout()
         if (inLayout)       // probably the result of a binding loop, but by letting it
             return;         // get this far we'll get a warning to that effect.
     }
-    qreal lineWidth = q->widthValid() ? q->width() - q->leftPadding() - q->rightPadding() : INT_MAX;
+    qreal lineWidth = q->widthValid() || !isImplicitResizeEnabled() ? q->width() - q->leftPadding() - q->rightPadding() : INT_MAX;
     qreal height = 0;
     qreal width = 0;
     do {
@@ -4279,8 +4280,13 @@ void QQuickTextInputPrivate::processKeyEvent(QKeyEvent* event)
             if (!(q->inputMethodHints() & Qt::ImhMultiLine))
                 inputMethod->hide();
 
+            if (activeFocus) {
+                // If we lost focus after hiding the virtual keyboard, we've already emitted
+                // editingFinished from handleFocusEvent. Otherwise we emit it now.
+                emit q->editingFinished();
+            }
+
             emit q->accepted();
-            emit q->editingFinished();
         }
         event->ignore();
         return;

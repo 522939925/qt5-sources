@@ -174,6 +174,8 @@ QVideoFrame::PixelFormat pixelFormatFromMediaSubtype(GUID uid)
         return QVideoFrame::Format_YUYV;
     else if (uid == MEDIASUBTYPE_NV12)
         return QVideoFrame::Format_NV12;
+    else if (uid == MEDIASUBTYPE_MJPG)
+        return QVideoFrame::Format_Jpeg;
     else if (uid == MEDIASUBTYPE_IMC1)
         return QVideoFrame::Format_IMC1;
     else if (uid == MEDIASUBTYPE_IMC2)
@@ -668,7 +670,7 @@ void DSCameraSession::onFrameAvailable(const char *frameData, long len)
     QMutexLocker locker(&m_captureMutex);
     if (m_currentImageId != -1 && !m_capturedFrame.isValid()) {
         m_capturedFrame = m_currentFrame;
-        emit imageExposed(m_currentImageId);
+        QMetaObject::invokeMethod(this, "imageExposed",  Qt::QueuedConnection, Q_ARG(int, m_currentImageId));
     }
 
     QMetaObject::invokeMethod(this, "presentFrame", Qt::QueuedConnection);
@@ -685,6 +687,9 @@ void DSCameraSession::presentFrame()
 
     m_presentMutex.unlock();
 
+    QImage captureImage;
+    int captureId;
+
     m_captureMutex.lock();
 
     if (m_capturedFrame.isValid()) {
@@ -692,27 +697,31 @@ void DSCameraSession::presentFrame()
 
         m_capturedFrame.map(QAbstractVideoBuffer::ReadOnly);
 
-        QImage image = QImage(m_capturedFrame.bits(),
-                              m_previewSize.width(), m_previewSize.height(),
-                              QImage::Format_RGB32);
+        captureImage = QImage(m_capturedFrame.bits(),
+                                m_previewSize.width(), m_previewSize.height(),
+                                QImage::Format_RGB32);
 
-        image = image.mirrored(m_needsHorizontalMirroring); // also causes a deep copy of the data
+        captureImage = captureImage.mirrored(m_needsHorizontalMirroring); // also causes a deep copy of the data
 
         m_capturedFrame.unmap();
 
-        emit imageCaptured(m_currentImageId, image);
+        captureId = m_currentImageId;
 
         QtConcurrent::run(this, &DSCameraSession::saveCapturedImage,
-                          m_currentImageId, image, m_imageCaptureFileName);
+                          m_currentImageId, captureImage, m_imageCaptureFileName);
 
         m_imageCaptureFileName.clear();
         m_currentImageId = -1;
-        updateReadyForCapture();
 
         m_capturedFrame = QVideoFrame();
     }
 
     m_captureMutex.unlock();
+
+    if (!captureImage.isNull())
+        emit imageCaptured(captureId, captureImage);
+
+    updateReadyForCapture();
 }
 
 void DSCameraSession::saveCapturedImage(int id, const QImage &image, const QString &path)

@@ -24,10 +24,12 @@
 #include <QClipboard>
 #include <QDir>
 #include <QGraphicsWidget>
+#include <QHBoxLayout>
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QMenu>
 #include <QMimeDatabase>
+#include <QOpenGLWidget>
 #include <QPaintEngine>
 #include <QPushButton>
 #include <QStateMachine>
@@ -114,6 +116,8 @@ private Q_SLOTS:
     void initTestCase();
     void cleanupTestCase();
     void thirdPartyCookiePolicy();
+    void comboBoxPopupPositionAfterMove();
+    void comboBoxPopupPositionAfterChildMove();
     void contextMenuCopy();
     void contextMenuPopulatedOnce();
     void acceptNavigationRequest();
@@ -144,7 +148,6 @@ private Q_SLOTS:
     void textEditing();
     void backActionUpdate();
     void protectBindingsRuntimeObjectsFromCollector();
-    void localURLSchemes();
     void testOptionalJSObjects();
     void testLocalStorageVisibility();
     void testEnablePersistentStorage();
@@ -203,9 +206,6 @@ private Q_SLOTS:
     void progressSignal();
     void urlChange();
     void requestedUrlAfterSetAndLoadFailures();
-    void javaScriptWindowObjectCleared_data();
-    void javaScriptWindowObjectCleared();
-    void javaScriptWindowObjectClearedOnEvaluate();
     void asyncAndDelete();
     void earlyToHtml();
     void setHtml();
@@ -217,7 +217,6 @@ private Q_SLOTS:
     void hitTestContent();
     void baseUrl_data();
     void baseUrl();
-    void renderHints();
     void scrollPosition();
     void scrollToAnchor();
     void scrollbarsOff();
@@ -240,10 +239,13 @@ private Q_SLOTS:
     void toPlainTextLoadFinishedRace_data();
     void toPlainTextLoadFinishedRace();
     void setZoomFactor();
+    void mouseButtonTranslation();
 
     void printToPdf();
 
 private:
+    static QPoint elementCenter(QWebEnginePage *page, const QString &id);
+
     QWebEngineView* m_view;
     QWebEnginePage* m_page;
     QWebEngineView* m_inputFieldsTestView;
@@ -421,9 +423,14 @@ void tst_QWebEnginePage::geolocationRequestJS()
         W_QSKIP("Geolocation is not supported.", SkipSingle);
     }
 
-    evaluateJavaScriptSync(newPage, "var errorCode = 0; function error(err) { errorCode = err.code; } function success(pos) { } navigator.geolocation.getCurrentPosition(success, error)");
+    evaluateJavaScriptSync(newPage, "var errorCode = 0; var done = false; function error(err) { errorCode = err.code; done = true; } function success(pos) { done = true; } navigator.geolocation.getCurrentPosition(success, error)");
 
-    QTRY_COMPARE(evaluateJavaScriptSync(newPage, "errorCode").toInt(), errorCode);
+    QTRY_VERIFY(evaluateJavaScriptSync(newPage, "done").toBool());
+    int result = evaluateJavaScriptSync(newPage, "errorCode").toInt();
+    if (result == 2)
+        QEXPECT_FAIL("", "No location service available.", Continue);
+    QCOMPARE(result, errorCode);
+
     delete view;
 }
 
@@ -2465,34 +2472,6 @@ void tst_QWebEnginePage::protectBindingsRuntimeObjectsFromCollector()
 #endif
 }
 
-void tst_QWebEnginePage::localURLSchemes()
-{
-#if !defined(QWEBENGINESECURITYORIGIN)
-    QSKIP("QWEBENGINESECURITYORIGIN");
-#else
-    int i = QWebEngineSecurityOrigin::localSchemes().size();
-
-    QWebEngineSecurityOrigin::removeLocalScheme("file");
-    QTRY_COMPARE(QWebEngineSecurityOrigin::localSchemes().size(), i);
-    QWebEngineSecurityOrigin::addLocalScheme("file");
-    QTRY_COMPARE(QWebEngineSecurityOrigin::localSchemes().size(), i);
-
-    QWebEngineSecurityOrigin::removeLocalScheme("qrc");
-    QTRY_COMPARE(QWebEngineSecurityOrigin::localSchemes().size(), i - 1);
-    QWebEngineSecurityOrigin::addLocalScheme("qrc");
-    QTRY_COMPARE(QWebEngineSecurityOrigin::localSchemes().size(), i);
-
-    QString myscheme = "myscheme";
-    QWebEngineSecurityOrigin::addLocalScheme(myscheme);
-    QTRY_COMPARE(QWebEngineSecurityOrigin::localSchemes().size(), i + 1);
-    QVERIFY(QWebEngineSecurityOrigin::localSchemes().contains(myscheme));
-    QWebEngineSecurityOrigin::removeLocalScheme(myscheme);
-    QTRY_COMPARE(QWebEngineSecurityOrigin::localSchemes().size(), i);
-    QWebEngineSecurityOrigin::removeLocalScheme(myscheme);
-    QTRY_COMPARE(QWebEngineSecurityOrigin::localSchemes().size(), i);
-#endif
-}
-
 #if defined(QWEBENGINEPAGE_SETTINGS)
 static inline bool testFlag(QWebEnginePage& webPage, QWebEngineSettings::WebAttribute settingAttribute, const QString& jsObjectName, bool settingValue)
 {
@@ -2914,6 +2893,9 @@ void tst_QWebEnginePage::testJSPrompt()
 {
     JSPromptPage page;
     bool res;
+    QSignalSpy loadSpy(&page, SIGNAL(loadFinished(bool)));
+    page.setHtml(QStringLiteral("<html><body></body></html>"));
+    QTRY_COMPARE(loadSpy.count(), 1);
 
     // OK + QString()
     res = evaluateJavaScriptSync(&page,
@@ -2975,31 +2957,26 @@ void tst_QWebEnginePage::findText()
     QSignalSpy loadSpy(m_page, SIGNAL(loadFinished(bool)));
     m_page->setHtml(QString("<html><head></head><body><div>foo bar</div></body></html>"));
     QTRY_COMPARE(loadSpy.count(), 1);
+
+    // Select whole page contents.
     m_page->triggerAction(QWebEnginePage::SelectAll);
     QTRY_COMPARE(m_page->hasSelection(), true);
-#if defined(QWEBENGINEPAGE_SELECTEDHTML)
-    QVERIFY(!m_page->selectedHtml().isEmpty());
-#endif
+
+    // Invoke a stopFinding() operation, which should clear the currently selected text.
     m_page->findText("");
-    QEXPECT_FAIL("", "Unsupported: findText only highlights and doesn't update the selection.", Continue);
-    QVERIFY(m_page->selectedText().isEmpty());
-#if defined(QWEBENGINEPAGE_SELECTEDHTML)
-    QVERIFY(m_page->selectedHtml().isEmpty());
-#endif
+    QTRY_VERIFY(m_page->selectedText().isEmpty());
+
     QStringList words = (QStringList() << "foo" << "bar");
     foreach (QString subString, words) {
+        // Invoke a find operation, which should clear the currently selected text, should
+        // highlight all the found ocurrences, but should not update the selected text to the
+        // searched for string.
         m_page->findText(subString);
-        QEXPECT_FAIL("", "Unsupported: findText only highlights and doesn't update the selection.", Continue);
-        QCOMPARE(m_page->selectedText(), subString);
-#if defined(QWEBENGINEPAGE_SELECTEDHTML)
-        QVERIFY(m_page->selectedHtml().contains(subString));
-#endif
+        QTRY_VERIFY(m_page->selectedText().isEmpty());
+
+        // Search highlights should be cleared, selected text should still be empty.
         m_page->findText("");
-        QEXPECT_FAIL("", "Unsupported: findText only highlights and doesn't update the selection.", Continue);
-        QVERIFY(m_page->selectedText().isEmpty());
-#if defined(QWEBENGINEPAGE_SELECTEDHTML)
-        QVERIFY(m_page->selectedHtml().isEmpty());
-#endif
+        QTRY_VERIFY(m_page->selectedText().isEmpty());
     }
 }
 
@@ -3150,6 +3127,96 @@ void tst_QWebEnginePage::thirdPartyCookiePolicy()
     QVERIFY(!DumpRenderTreeSupportQt::thirdPartyCookiePolicyAllows(m_page->handle(),
             QUrl("http://anotherexample.co.uk"), QUrl("http://example.co.uk")));
 #endif
+}
+
+static QWindow *findNewTopLevelWindow(const QWindowList &oldTopLevelWindows)
+{
+    const auto tlws = QGuiApplication::topLevelWindows();
+    for (auto w : tlws) {
+        if (!oldTopLevelWindows.contains(w)) {
+            return w;
+        }
+    }
+    return nullptr;
+}
+
+void tst_QWebEnginePage::comboBoxPopupPositionAfterMove()
+{
+    QScreen *screen = QGuiApplication::primaryScreen();
+    QWebEngineView view;
+    view.move(screen->availableGeometry().topLeft());
+    view.resize(640, 480);
+    view.show();
+
+    QSignalSpy loadSpy(&view, SIGNAL(loadFinished(bool)));
+    view.setHtml(QLatin1String("<html><head></head><body><select id='foo'>"
+                               "<option>fran</option><option>troz</option>"
+                               "</select></body></html>"));
+    QTRY_COMPARE(loadSpy.count(), 1);
+    const auto oldTlws = QGuiApplication::topLevelWindows();
+    QWindow *window = view.windowHandle();
+    QTest::mouseClick(window, Qt::LeftButton, Qt::KeyboardModifiers(),
+                      elementCenter(view.page(), "foo"));
+
+    QWindow *popup = nullptr;
+    QTRY_VERIFY(popup = findNewTopLevelWindow(oldTlws));
+    QPoint popupPos = popup->position();
+
+    // Close the popup by clicking somewhere into the page.
+    QTest::mouseClick(window, Qt::LeftButton, Qt::KeyboardModifiers(), QPoint(1, 1));
+    QTRY_VERIFY(!QGuiApplication::topLevelWindows().contains(popup));
+
+    // Move the top-level QWebEngineView a little and check the popup's position.
+    const QPoint offset(12, 13);
+    view.move(screen->availableGeometry().topLeft() + offset);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::KeyboardModifiers(),
+                      elementCenter(view.page(), "foo"));
+    QTRY_VERIFY(popup = findNewTopLevelWindow(oldTlws));
+    QCOMPARE(popupPos + offset, popup->position());
+}
+
+void tst_QWebEnginePage::comboBoxPopupPositionAfterChildMove()
+{
+    QWidget mainWidget;
+    mainWidget.setLayout(new QHBoxLayout);
+
+    QWidget spacer;
+    spacer.setMinimumWidth(50);
+    mainWidget.layout()->addWidget(&spacer);
+
+    QWebEngineView view;
+    mainWidget.layout()->addWidget(&view);
+
+    QScreen *screen = QGuiApplication::primaryScreen();
+    mainWidget.move(screen->availableGeometry().topLeft());
+    mainWidget.resize(640, 480);
+    mainWidget.show();
+
+    QSignalSpy loadSpy(&view, SIGNAL(loadFinished(bool)));
+    view.setHtml(QLatin1String("<html><head></head><body><select autofocus id='foo'>"
+                               "<option value=\"narf\">narf</option><option>zort</option>"
+                               "</select></body></html>"));
+    QTRY_COMPARE(loadSpy.count(), 1);
+    const auto oldTlws = QGuiApplication::topLevelWindows();
+    QWindow *window = view.window()->windowHandle();
+    QTest::mouseClick(window, Qt::LeftButton, Qt::KeyboardModifiers(),
+                      view.mapTo(view.window(), elementCenter(view.page(), "foo")));
+
+    QWindow *popup = nullptr;
+    QTRY_VERIFY(popup = findNewTopLevelWindow(oldTlws));
+    QPoint popupPos = popup->position();
+
+    // Close the popup by clicking somewhere into the page.
+    QTest::mouseClick(window, Qt::LeftButton, Qt::KeyboardModifiers(),
+                      view.mapTo(view.window(), QPoint(1, 1)));
+    QTRY_VERIFY(!QGuiApplication::topLevelWindows().contains(popup));
+
+    // Resize the "spacer" widget, and implicitly change the global position of the QWebEngineView.
+    spacer.setMinimumWidth(100);
+    QTest::mouseClick(window, Qt::LeftButton, Qt::KeyboardModifiers(),
+                      view.mapTo(view.window(), elementCenter(view.page(), "foo")));
+    QTRY_VERIFY(popup = findNewTopLevelWindow(oldTlws));
+    QCOMPARE(popupPos + QPoint(50, 0), popup->position());
 }
 
 #ifdef Q_OS_MAC
@@ -3921,48 +3988,6 @@ void tst_QWebEnginePage::requestedUrlAfterSetAndLoadFailures()
     QVERIFY(!spy.at(1).first().toBool());
 }
 
-void tst_QWebEnginePage::javaScriptWindowObjectCleared_data()
-{
-    QTest::addColumn<QString>("html");
-    QTest::addColumn<int>("signalCount");
-    QTest::newRow("with <script>") << "<html><body><script>i=0</script><p>hello world</p></body></html>" << 1;
-    // NOTE: Empty scripts no longer cause this signal to be emitted.
-    QTest::newRow("with empty <script>") << "<html><body><script></script><p>hello world</p></body></html>" << 0;
-    QTest::newRow("without <script>") << "<html><body><p>hello world</p></body></html>" << 0;
-}
-
-void tst_QWebEnginePage::javaScriptWindowObjectCleared()
-{
-#if !defined(QWEBENGINEPAGE_JAVASCRIPTWINDOWOBJECTCLEARED)
-    QSKIP("QWEBENGINEPAGE_JAVASCRIPTWINDOWOBJECTCLEARED");
-#else
-    QWebEnginePage page;
-    QSignalSpy spy(&page, SIGNAL(javaScriptWindowObjectCleared()));
-    QFETCH(QString, html);
-    page.setHtml(html);
-
-    QFETCH(int, signalCount);
-    QCOMPARE(spy.count(), signalCount);
-#endif
-}
-
-void tst_QWebEnginePage::javaScriptWindowObjectClearedOnEvaluate()
-{
-#if !defined(QWEBENGINEPAGE_EVALUATEJAVASCRIPT)
-    QSKIP("QWEBENGINEPAGE_EVALUATEJAVASCRIPT");
-#else
-    QWebEnginePage page;
-    QSignalSpy spy(&page, SIGNAL(javaScriptWindowObjectCleared()));
-    page.setHtml("<html></html>");
-    QCOMPARE(spy.count(), 0);
-    page.evaluateJavaScript("var a = 'a';");
-    QCOMPARE(spy.count(), 1);
-    // no new clear for a new script:
-    page.evaluateJavaScript("var a = 1;");
-    QCOMPARE(spy.count(), 1);
-#endif
-}
-
 void tst_QWebEnginePage::asyncAndDelete()
 {
     QWebEnginePage *page = new QWebEnginePage;
@@ -3996,28 +4021,26 @@ void tst_QWebEnginePage::setHtml()
 
 void tst_QWebEnginePage::setHtmlWithImageResource()
 {
-    // By default, only security origins of local files can load local resources.
-    // So we should specify baseUrl to be a local file in order to get a proper origin and load the local image.
+    // We allow access to qrc resources from any security origin, including local and anonymous
 
     QLatin1String html("<html><body><p>hello world</p><img src='qrc:/resources/image.png'/></body></html>");
     QWebEnginePage page;
 
-    page.setHtml(html, QUrl(QLatin1String("file:///path/to/file")));
-    waitForSignal(&page, SIGNAL(loadFinished(bool)));
+    QSignalSpy spy(&page, SIGNAL(loadFinished(bool)));
+    page.setHtml(html, QUrl("file:///path/to/file"));
+    QTRY_COMPARE(spy.count(), 1);
 
     QCOMPARE(evaluateJavaScriptSync(&page, "document.images.length").toInt(), 1);
     QCOMPARE(evaluateJavaScriptSync(&page, "document.images[0].width").toInt(), 128);
     QCOMPARE(evaluateJavaScriptSync(&page, "document.images[0].height").toInt(), 128);
 
-    // Now we test the opposite: without a baseUrl as a local file, we cannot request local resources.
+    // Now we test the opposite: without a baseUrl as a local file, we can still request qrc resources.
 
     page.setHtml(html);
-    waitForSignal(&page, SIGNAL(loadFinished(bool)));
+    QTRY_COMPARE(spy.count(), 2);
     QCOMPARE(evaluateJavaScriptSync(&page, "document.images.length").toInt(), 1);
-    QEXPECT_FAIL("", "https://bugs.webkit.org/show_bug.cgi?id=118659", Continue);
-    QCOMPARE(evaluateJavaScriptSync(&page, "document.images[0].width").toInt(), 0);
-    QEXPECT_FAIL("", "https://bugs.webkit.org/show_bug.cgi?id=118659", Continue);
-    QCOMPARE(evaluateJavaScriptSync(&page, "document.images[0].height").toInt(), 0);
+    QCOMPARE(evaluateJavaScriptSync(&page, "document.images[0].width").toInt(), 128);
+    QCOMPARE(evaluateJavaScriptSync(&page, "document.images[0].height").toInt(), 128);
 }
 
 void tst_QWebEnginePage::setHtmlWithStylesheetResource()
@@ -4196,167 +4219,30 @@ void tst_QWebEnginePage::baseUrl()
     QCOMPARE(baseUrlSync(m_page), baseUrl);
 }
 
-class DummyPaintEngine: public QPaintEngine {
-public:
-
-    DummyPaintEngine()
-        : QPaintEngine(QPaintEngine::AllFeatures)
-        , renderHints(0)
-    {
-    }
-
-    bool begin(QPaintDevice*)
-    {
-        setActive(true);
-        return true;
-    }
-
-    bool end()
-    {
-        setActive(false);
-        return false;
-    }
-
-    void updateState(const QPaintEngineState& state)
-    {
-        renderHints = state.renderHints();
-    }
-
-    void drawPath(const QPainterPath&) { }
-    void drawPixmap(const QRectF&, const QPixmap&, const QRectF&) { }
-
-    QPaintEngine::Type type() const
-    {
-        return static_cast<QPaintEngine::Type>(QPaintEngine::User + 2);
-    }
-
-    QPainter::RenderHints renderHints;
-};
-
-class DummyPaintDevice: public QPaintDevice {
-public:
-    DummyPaintDevice()
-        : QPaintDevice()
-        , m_engine(new DummyPaintEngine)
-    {
-    }
-
-    ~DummyPaintDevice()
-    {
-        delete m_engine;
-    }
-
-    QPaintEngine* paintEngine() const
-    {
-        return m_engine;
-    }
-
-    QPainter::RenderHints renderHints() const
-    {
-        return m_engine->renderHints;
-    }
-
-protected:
-    int metric(PaintDeviceMetric metric) const;
-
-private:
-    DummyPaintEngine* m_engine;
-    friend class DummyPaintEngine;
-};
-
-
-int DummyPaintDevice::metric(PaintDeviceMetric metric) const
-{
-    switch (metric) {
-    case PdmWidth:
-        return 400;
-        break;
-
-    case PdmHeight:
-        return 200;
-        break;
-
-    case PdmNumColors:
-        return INT_MAX;
-        break;
-
-    case PdmDepth:
-        return 32;
-        break;
-
-    default:
-        break;
-    }
-    return 0;
-}
-
-void tst_QWebEnginePage::renderHints()
-{
-#if !defined(QWEBENGINEPAGE_RENDER)
-    QSKIP("QWEBENGINEPAGE_RENDER");
-#else
-    QString html("<html><body><p>Hello, world!</p></body></html>");
-
-    QWebEnginePage page;
-    page.setHtml(html);
-    page.setViewportSize(page.contentsSize());
-
-    // We will call frame->render and trap the paint engine state changes
-    // to ensure that GraphicsContext does not clobber the render hints.
-    DummyPaintDevice buffer;
-    QPainter painter(&buffer);
-
-    painter.setRenderHint(QPainter::TextAntialiasing, false);
-    page.render(&painter);
-    QVERIFY(!(buffer.renderHints() & QPainter::TextAntialiasing));
-    QVERIFY(!(buffer.renderHints() & QPainter::SmoothPixmapTransform));
-    QVERIFY(!(buffer.renderHints() & QPainter::HighQualityAntialiasing));
-
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    page.render(&painter);
-    QVERIFY(buffer.renderHints() & QPainter::TextAntialiasing);
-    QVERIFY(!(buffer.renderHints() & QPainter::SmoothPixmapTransform));
-    QVERIFY(!(buffer.renderHints() & QPainter::HighQualityAntialiasing));
-
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    page.render(&painter);
-    QVERIFY(buffer.renderHints() & QPainter::TextAntialiasing);
-    QVERIFY(buffer.renderHints() & QPainter::SmoothPixmapTransform);
-    QVERIFY(!(buffer.renderHints() & QPainter::HighQualityAntialiasing));
-
-    painter.setRenderHint(QPainter::HighQualityAntialiasing, true);
-    page.render(&painter);
-    QVERIFY(buffer.renderHints() & QPainter::TextAntialiasing);
-    QVERIFY(buffer.renderHints() & QPainter::SmoothPixmapTransform);
-    QVERIFY(buffer.renderHints() & QPainter::HighQualityAntialiasing);
-#endif
-}
-
 void tst_QWebEnginePage::scrollPosition()
 {
-#if !defined(QWEBENGINEPAGE_EVALUATEJAVASCRIPT)
-    QSKIP("QWEBENGINEPAGE_EVALUATEJAVASCRIPT");
-#else
     // enlarged image in a small viewport, to provoke the scrollbars to appear
     QString html("<html><body><img src='qrc:/image.png' height=500 width=500/></body></html>");
 
-    QWebEnginePage page;
-    page.setViewportSize(QSize(200, 200));
+    QWebEngineView view;
+    view.setFixedSize(200,200);
+    view.show();
 
-    page.setHtml(html);
-    page.setScrollBarPolicy(Qt::Vertical, Qt::ScrollBarAlwaysOff);
-    page.setScrollBarPolicy(Qt::Horizontal, Qt::ScrollBarAlwaysOff);
+    QTest::qWaitForWindowExposed(&view);
+
+    QSignalSpy loadSpy(view.page(), SIGNAL(loadFinished(bool)));
+    view.setHtml(html);
+    QTRY_COMPARE(loadSpy.count(), 1);
 
     // try to set the scroll offset programmatically
-    page.setScrollPosition(QPoint(23, 29));
-    QCOMPARE(page.scrollPosition().x(), 23);
-    QCOMPARE(page.scrollPosition().y(), 29);
+    view.page()->runJavaScript("window.scrollTo(23, 29);");
+    QTRY_COMPARE(view.page()->scrollPosition().x(), qreal(23));
+    QCOMPARE(view.page()->scrollPosition().y(), qreal(29));
 
-    int x = page.evaluateJavaScript("window.scrollX").toInt();
-    int y = page.evaluateJavaScript("window.scrollY").toInt();
+    int x = evaluateJavaScriptSync(view.page(), "window.scrollX").toInt();
+    int y = evaluateJavaScriptSync(view.page(), "window.scrollY").toInt();
     QCOMPARE(x, 23);
     QCOMPARE(y, 29);
-#endif
 }
 
 void tst_QWebEnginePage::scrollToAnchor()
@@ -5069,6 +4955,58 @@ void tst_QWebEnginePage::printToPdf()
     CallbackSpy<QByteArray> failedInvalidLayoutSpy;
     page.printToPdf(failedInvalidLayoutSpy.ref(), QPageLayout());
     QCOMPARE(failedInvalidLayoutSpy.waitForResult().length(), 0);
+}
+
+void tst_QWebEnginePage::mouseButtonTranslation()
+{
+    QWebEngineView *view = new QWebEngineView;
+
+    QSignalSpy spy(view, SIGNAL(loadFinished(bool)));
+    view->setHtml(QStringLiteral(
+                      "<html><head><script>\
+                           var lastEvent = { 'button' : -1 }; \
+                           function saveLastEvent(event) { console.log(event); lastEvent = event; }; \
+                      </script></head>\
+                      <body>\
+                      <div style=\"height:600px;\" onmousedown=\"saveLastEvent(event)\">\
+                      </div>\
+                      </body></html>"));
+    view->show();
+    QTest::qWaitForWindowExposed(view);
+    QTRY_VERIFY(spy.count() == 1);
+
+    QVERIFY(view->focusProxy() != nullptr);
+
+    QMouseEvent evpres(QEvent::MouseButtonPress, view->rect().center(), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QGuiApplication::sendEvent(view->focusProxy(), &evpres);
+
+    QTRY_COMPARE(evaluateJavaScriptSync(view->page(), "lastEvent.button").toInt(), 0);
+    QCOMPARE(evaluateJavaScriptSync(view->page(), "lastEvent.buttons").toInt(), 1);
+
+    QMouseEvent evpres2(QEvent::MouseButtonPress, view->rect().center(), Qt::RightButton, Qt::LeftButton | Qt::RightButton, Qt::NoModifier);
+    QGuiApplication::sendEvent(view->focusProxy(), &evpres2);
+
+    QTRY_COMPARE(evaluateJavaScriptSync(view->page(), "lastEvent.button").toInt(), 2);
+    QCOMPARE(evaluateJavaScriptSync(view->page(), "lastEvent.buttons").toInt(), 3);
+
+    delete view;
+}
+
+QPoint tst_QWebEnginePage::elementCenter(QWebEnginePage *page, const QString &id)
+{
+    QVariantList rectList = evaluateJavaScriptSync(page,
+            "(function(){"
+            "var elem = document.getElementById('" + id + "');"
+            "var rect = elem.getBoundingClientRect();"
+            "return [(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2];"
+            "})()").toList();
+
+    if (rectList.count() != 2) {
+        qWarning("elementCenter failed.");
+        return QPoint();
+    }
+
+    return QPoint(rectList.at(0).toInt(), rectList.at(1).toInt());
 }
 
 QTEST_MAIN(tst_QWebEnginePage)

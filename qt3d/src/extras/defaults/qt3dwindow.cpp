@@ -98,6 +98,7 @@ Qt3DWindow::Qt3DWindow(QScreen *screen)
     format.setSamples(4);
     format.setStencilBufferSize(8);
     setFormat(format);
+    QSurfaceFormat::setDefaultFormat(format);
     create();
 
     m_aspectEngine->registerAspect(m_renderAspect);
@@ -143,7 +144,7 @@ Qt3DRender::QFrameGraphNode *Qt3DWindow::activeFrameGraph() const
     return m_renderSettings->activeFrameGraph();
 }
 
-Qt3DExtras::QForwardRenderer *Qt3DWindow::defaultFramegraph() const
+Qt3DExtras::QForwardRenderer *Qt3DWindow::defaultFrameGraph() const
 {
     return m_forwardRenderer;
 }

@@ -126,9 +126,15 @@ qreal QQuickDialPrivate::valueAt(qreal position) const
 
 qreal QQuickDialPrivate::snapPosition(qreal position) const
 {
-    if (qFuzzyIsNull(stepSize))
+    const qreal range = to - from;
+    if (qFuzzyIsNull(range))
         return position;
-    return qRound(position / stepSize) * stepSize;
+
+    const qreal effectiveStep = stepSize / range;
+    if (qFuzzyIsNull(effectiveStep))
+        return position;
+
+    return qRound(position / effectiveStep) * effectiveStep;
 }
 
 qreal QQuickDialPrivate::positionAt(const QPoint &point) const
@@ -294,6 +300,8 @@ qreal QQuickDial::position() const
     Like the \l position property, angle is continuously updated while the
     handle is dragged.
 
+    The range is from \c -140 degrees to \c 140 degrees.
+
     \sa position
 */
 qreal QQuickDial::angle() const
@@ -305,7 +313,18 @@ qreal QQuickDial::angle() const
 /*!
     \qmlproperty real QtQuick.Controls::Dial::stepSize
 
-    This property holds the step size. The default value is \c 0.0.
+    This property holds the step size.
+
+    The step size determines the amount by which the dial's value
+    is increased and decreased when interacted with via the keyboard.
+    For example, a step size of \c 0.2, will result in the dial's
+    value increasing and decreasing in increments of \c 0.2.
+
+    The step size is only respected for touch and mouse interaction
+    when \l snapMode is set to a value other than \c Dial.NoSnap.
+
+    The default value is \c 0.0, which results in an effective step
+    size of \c 0.1 for keyboard interaction.
 
     \sa snapMode, increase(), decrease()
 */
@@ -454,7 +473,7 @@ void QQuickDial::decrease()
 }
 
 /*!
-    \qmlproperty component QtQuick.Controls::Dial::handle
+    \qmlproperty Item QtQuick.Controls::Dial::handle
 
     This property holds the handle of the dial.
 
@@ -474,6 +493,7 @@ void QQuickDial::setHandle(QQuickItem *handle)
     if (handle == d->handle)
         return;
 
+    d->deleteDelegate(d->handle);
     d->handle = handle;
     if (d->handle && !d->handle->parentItem())
         d->handle->setParentItem(this);

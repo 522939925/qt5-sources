@@ -348,14 +348,14 @@ WebContentsAdapterPrivate::~WebContentsAdapterPrivate()
     webContents.reset();
 }
 
-QExplicitlySharedDataPointer<WebContentsAdapter> WebContentsAdapter::createFromSerializedNavigationHistory(QDataStream &input, WebContentsAdapterClient *adapterClient)
+QSharedPointer<WebContentsAdapter> WebContentsAdapter::createFromSerializedNavigationHistory(QDataStream &input, WebContentsAdapterClient *adapterClient)
 {
     int currentIndex;
     std::vector<scoped_ptr<content::NavigationEntry>> entries;
     deserializeNavigationHistory(input, &currentIndex, &entries, adapterClient->browserContextAdapter()->browserContext());
 
     if (currentIndex == -1)
-        return QExplicitlySharedDataPointer<WebContentsAdapter>();
+        return QSharedPointer<WebContentsAdapter>();
 
     // Unlike WebCore, Chromium only supports Restoring to a new WebContents instance.
     content::WebContents* newWebContents = createBlankWebContents(adapterClient, adapterClient->browserContextAdapter()->browserContext());
@@ -373,7 +373,7 @@ QExplicitlySharedDataPointer<WebContentsAdapter> WebContentsAdapter::createFromS
             content::ChildProcessSecurityPolicy::GetInstance()->GrantReadFile(id, *file);
     }
 
-    return QExplicitlySharedDataPointer<WebContentsAdapter>(new WebContentsAdapter(newWebContents));
+    return QSharedPointer<WebContentsAdapter>::create(newWebContents);
 }
 
 WebContentsAdapter::WebContentsAdapter(content::WebContents *webContents)
@@ -835,6 +835,9 @@ void WebContentsAdapter::stopFinding()
 {
     Q_D(WebContentsAdapter);
     d->webContentsDelegate->setLastSearchedString(QString());
+    // Clear any previous selection,
+    // but keep the renderer blue rectangle selection just like Chromium does.
+    d->webContents->Unselect();
     d->webContents->StopFinding(content::STOP_FIND_ACTION_KEEP_SELECTION);
 }
 
@@ -1056,18 +1059,12 @@ void WebContentsAdapter::setWebChannel(QWebChannel *channel, uint worldId)
 static QMimeData *mimeDataFromDropData(const content::DropData &dropData)
 {
     QMimeData *mimeData = new QMimeData();
-    if (!dropData.text.is_null()) {
+    if (!dropData.text.is_null())
         mimeData->setText(toQt(dropData.text.string()));
-        return mimeData;
-    }
-    if (!dropData.html.is_null()) {
+    if (!dropData.html.is_null())
         mimeData->setHtml(toQt(dropData.html.string()));
-        return mimeData;
-    }
-    if (dropData.url.is_valid()) {
+    if (dropData.url.is_valid())
         mimeData->setUrls(QList<QUrl>() << toQt(dropData.url));
-        return mimeData;
-    }
     return mimeData;
 }
 
@@ -1161,6 +1158,16 @@ Qt::DropAction WebContentsAdapter::updateDragPosition(QDragMoveEvent *e, const Q
     content::RenderViewHost *rvh = d->webContents->GetRenderViewHost();
     rvh->DragTargetDragOver(toGfx(e->pos()), toGfx(screenPos), toWeb(e->possibleActions()),
                             blink::WebInputEvent::LeftButtonDown);
+
+    base::MessageLoop *currentMessageLoop = base::MessageLoop::current();
+    DCHECK(currentMessageLoop);
+    if (!currentMessageLoop->NestableTasksAllowed()) {
+        // We're already inside a MessageLoop::RunTask call, and scheduled tasks will not be
+        // executed. That means, updateDragAction will never be called, and the RunLoop below will
+        // remain blocked forever.
+        qWarning("WebContentsAdapter::updateDragPosition called from MessageLoop::RunTask.");
+        return Qt::IgnoreAction;
+    }
 
     // Wait until we get notified via RenderViewHostDelegateView::UpdateDragCursor. This calls
     // WebContentsAdapter::updateDragAction that will eventually quit the nested loop.

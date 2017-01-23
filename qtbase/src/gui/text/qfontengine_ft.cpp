@@ -70,7 +70,7 @@
 #include FT_CONFIG_OPTIONS_H
 #endif
 
-#if defined(FT_LCD_FILTER_H) && defined(FT_CONFIG_OPTION_SUBPIXEL_RENDERING)
+#if defined(FT_LCD_FILTER_H)
 #define QT_USE_FREETYPE_LCDFILTER
 #endif
 
@@ -259,7 +259,6 @@ QFreetypeFace *QFreetypeFace::getFace(const QFontEngine::FaceId &face_id,
         newFreetype->ref.store(1);
         newFreetype->xsize = 0;
         newFreetype->ysize = 0;
-        newFreetype->scalableBitmapScaleFactor = 1;
         newFreetype->matrix.xx = 0x10000;
         newFreetype->matrix.yy = 0x10000;
         newFreetype->matrix.xy = 0;
@@ -335,10 +334,11 @@ void QFreetypeFace::release(const QFontEngine::FaceId &face_id)
 }
 
 
-void QFreetypeFace::computeSize(const QFontDef &fontDef, int *xsize, int *ysize, bool *outline_drawing)
+void QFreetypeFace::computeSize(const QFontDef &fontDef, int *xsize, int *ysize, bool *outline_drawing, QFixed *scalableBitmapScaleFactor)
 {
     *ysize = qRound(fontDef.pixelSize * 64);
     *xsize = *ysize * fontDef.stretch / 100;
+    *scalableBitmapScaleFactor = 1;
     *outline_drawing = false;
 
     if (!(face->face_flags & FT_FACE_FLAG_SCALABLE)) {
@@ -376,7 +376,7 @@ void QFreetypeFace::computeSize(const QFontDef &fontDef, int *xsize, int *ysize,
         // to make sure we can select the desired bitmap strike index
         if (FT_Select_Size(face, best) == 0) {
             if (isScalableBitmap())
-                scalableBitmapScaleFactor = QFixed::fromReal((qreal)fontDef.pixelSize / face->available_sizes[best].height);
+                *scalableBitmapScaleFactor = QFixed::fromReal((qreal)fontDef.pixelSize / face->available_sizes[best].height);
             *xsize = face->available_sizes[best].x_ppem;
             *ysize = face->available_sizes[best].y_ppem;
         } else {
@@ -729,7 +729,7 @@ bool QFontEngineFT::init(FaceId faceId, bool antialias, GlyphFormat format,
         symbol = bool(fontDef.family.contains(QLatin1String("symbol"), Qt::CaseInsensitive));
     }
 
-    freetype->computeSize(fontDef, &xsize, &ysize, &defaultGlyphSet.outline_drawing);
+    freetype->computeSize(fontDef, &xsize, &ysize, &defaultGlyphSet.outline_drawing, &scalableBitmapScaleFactor);
 
     FT_Face face = lockFace();
 
@@ -1294,24 +1294,24 @@ int QFontEngineFT::synthesized() const
 QFixed QFontEngineFT::ascent() const
 {
     QFixed v = QFixed::fromFixed(metrics.ascender);
-    if (freetype->scalableBitmapScaleFactor != 1)
-        v *= freetype->scalableBitmapScaleFactor;
+    if (scalableBitmapScaleFactor != 1)
+        v *= scalableBitmapScaleFactor;
     return v;
 }
 
 QFixed QFontEngineFT::descent() const
 {
     QFixed v = QFixed::fromFixed(-metrics.descender);
-    if (freetype->scalableBitmapScaleFactor != 1)
-        v *= freetype->scalableBitmapScaleFactor;
+    if (scalableBitmapScaleFactor != 1)
+        v *= scalableBitmapScaleFactor;
     return v;
 }
 
 QFixed QFontEngineFT::leading() const
 {
     QFixed v = QFixed::fromFixed(metrics.height - metrics.ascender + metrics.descender);
-    if (freetype->scalableBitmapScaleFactor != 1)
-        v *= freetype->scalableBitmapScaleFactor;
+    if (scalableBitmapScaleFactor != 1)
+        v *= scalableBitmapScaleFactor;
     return v;
 }
 
@@ -1326,7 +1326,7 @@ QFixed QFontEngineFT::xHeight() const
             return answer;
         }
     } else {
-        return QFixed(freetype->face->size->metrics.y_ppem) * freetype->scalableBitmapScaleFactor;
+        return QFixed(freetype->face->size->metrics.y_ppem) * scalableBitmapScaleFactor;
     }
     return QFontEngine::xHeight();
 }
@@ -1352,8 +1352,8 @@ QFixed QFontEngineFT::averageCharWidth() const
 qreal QFontEngineFT::maxCharWidth() const
 {
     QFixed max_advance = QFixed::fromFixed(metrics.max_advance);
-    if (freetype->scalableBitmapScaleFactor != 1)
-        max_advance *= freetype->scalableBitmapScaleFactor;
+    if (scalableBitmapScaleFactor != 1)
+        max_advance *= scalableBitmapScaleFactor;
     return max_advance.toReal();
 }
 
@@ -1639,7 +1639,7 @@ bool QFontEngineFT::shouldUseDesignMetrics(QFontEngine::ShaperFlags flags) const
 
 QFixed QFontEngineFT::scaledBitmapMetrics(QFixed m) const
 {
-    return m * freetype->scalableBitmapScaleFactor;
+    return m * scalableBitmapScaleFactor;
 }
 
 glyph_metrics_t QFontEngineFT::scaledBitmapMetrics(const glyph_metrics_t &m) const
@@ -1677,8 +1677,8 @@ void QFontEngineFT::recalcAdvances(QGlyphLayout *glyphs, QFontEngine::ShaperFlag
                 delete g;
         }
 
-        if (freetype->scalableBitmapScaleFactor != 1)
-            glyphs->advances[i] *= freetype->scalableBitmapScaleFactor;
+        if (scalableBitmapScaleFactor != 1)
+            glyphs->advances[i] *= scalableBitmapScaleFactor;
     }
     if (face)
         unlockFace();
@@ -1827,7 +1827,7 @@ glyph_metrics_t QFontEngineFT::alphaMapBoundingBox(glyph_t glyph, QFixed subPixe
 
 static inline QImage alphaMapFromGlyphData(QFontEngineFT::Glyph *glyph, QFontEngine::GlyphFormat glyphFormat)
 {
-    if (glyph == Q_NULLPTR)
+    if (glyph == Q_NULLPTR || glyph->height == 0 || glyph->width == 0)
         return QImage();
 
     QImage::Format format = QImage::Format_Invalid;
@@ -1849,7 +1849,10 @@ static inline QImage alphaMapFromGlyphData(QFontEngineFT::Glyph *glyph, QFontEng
         Q_UNREACHABLE();
     };
 
-    return QImage(static_cast<const uchar *>(glyph->data), glyph->width, glyph->height, bytesPerLine, format);
+    QImage img(static_cast<const uchar *>(glyph->data), glyph->width, glyph->height, bytesPerLine, format);
+    if (format == QImage::Format_Mono)
+        img.setColor(1, QColor(Qt::white).rgba());  // Expands color table to 2 items; item 0 set to transparent.
+    return img;
 }
 
 QImage *QFontEngineFT::lockedAlphaMapForGlyph(glyph_t glyphIndex, QFixed subPixelPosition,
@@ -1872,10 +1875,14 @@ QImage *QFontEngineFT::lockedAlphaMapForGlyph(glyph_t glyphIndex, QFixed subPixe
 
     currentlyLockedAlphaMap = alphaMapFromGlyphData(glyph, neededFormat);
 
+    const bool glyphHasGeometry = glyph != Q_NULLPTR && glyph->height != 0 && glyph->width != 0;
     if (!cacheEnabled && glyph != &emptyGlyph) {
         currentlyLockedAlphaMap = currentlyLockedAlphaMap.copy();
         delete glyph;
     }
+
+    if (!glyphHasGeometry)
+        return Q_NULLPTR;
 
     if (currentlyLockedAlphaMap.isNull())
         return QFontEngine::lockedAlphaMapForGlyph(glyphIndex, subPixelPosition, neededFormat, t, offset);
@@ -1981,9 +1988,9 @@ QImage QFontEngineFT::bitmapForGlyph(glyph_t g, QFixed subPixelPosition, const Q
     else if (defaultFormat == GlyphFormat::Format_Mono)
         img = QImage(glyph->data, glyph->width, glyph->height, QImage::Format_Mono).copy();
 
-    if (!img.isNull() && (!t.isIdentity() || freetype->scalableBitmapScaleFactor != 1)) {
+    if (!img.isNull() && (!t.isIdentity() || scalableBitmapScaleFactor != 1)) {
         QTransform trans(t);
-        const qreal scaleFactor = freetype->scalableBitmapScaleFactor.toReal();
+        const qreal scaleFactor = scalableBitmapScaleFactor.toReal();
         trans.scale(scaleFactor, scaleFactor);
         img = img.transformed(trans, Qt::SmoothTransformation);
     }

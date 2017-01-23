@@ -40,6 +40,7 @@
 #include "qquickpopup_p_p.h"
 
 #include <QtCore/qregexp.h>
+#include <QtCore/qabstractitemmodel.h>
 #include <QtGui/qpa/qplatformtheme.h>
 #include <QtQml/qjsvalue.h>
 #include <QtQml/qqmlcontext.h>
@@ -169,6 +170,7 @@ public:
     void updateCurrentText();
     void incrementCurrentIndex();
     void decrementCurrentIndex();
+    void updateHighlightedIndex();
     void setHighlightedIndex(int index);
 
     void createDelegateModel();
@@ -199,19 +201,17 @@ void QQuickComboBoxPrivate::showPopup()
 {
     if (popup && !popup->isVisible())
         popup->open();
-    setHighlightedIndex(currentIndex);
 }
 
 void QQuickComboBoxPrivate::hidePopup(bool accept)
 {
     Q_Q(QQuickComboBox);
-    if (popup && popup->isVisible())
-        popup->close();
     if (accept) {
         q->setCurrentIndex(highlightedIndex);
         emit q->activated(currentIndex);
     }
-    setHighlightedIndex(-1);
+    if (popup && popup->isVisible())
+        popup->close();
 }
 
 void QQuickComboBoxPrivate::togglePopup(bool accept)
@@ -300,6 +300,11 @@ void QQuickComboBoxPrivate::decrementCurrentIndex()
             emit q->activated(currentIndex);
         }
     }
+}
+
+void QQuickComboBoxPrivate::updateHighlightedIndex()
+{
+    setHighlightedIndex(popup->isVisible() ? currentIndex : -1);
 }
 
 void QQuickComboBoxPrivate::setHighlightedIndex(int index)
@@ -409,6 +414,11 @@ void QQuickComboBox::setModel(const QVariant& m)
 
     if (d->model == model)
         return;
+
+    if (QAbstractItemModel* aim = qvariant_cast<QAbstractItemModel *>(d->model))
+        QObjectPrivate::disconnect(aim, &QAbstractItemModel::dataChanged, d, &QQuickComboBoxPrivate::updateCurrentText);
+    if (QAbstractItemModel* aim = qvariant_cast<QAbstractItemModel *>(model))
+        QObjectPrivate::connect(aim, &QAbstractItemModel::dataChanged, d, &QQuickComboBoxPrivate::updateCurrentText);
 
     d->model = model;
     d->createDelegateModel();
@@ -621,7 +631,7 @@ void QQuickComboBox::setIndicator(QQuickItem *indicator)
     if (d->indicator == indicator)
         return;
 
-    delete d->indicator;
+    d->deleteDelegate(d->indicator);
     d->indicator = indicator;
     if (indicator) {
         if (!indicator->parentItem())
@@ -649,10 +659,13 @@ void QQuickComboBox::setPopup(QQuickPopup *popup)
     if (d->popup == popup)
         return;
 
-    delete d->popup;
+    if (d->popup)
+        QObjectPrivate::disconnect(d->popup, &QQuickPopup::visibleChanged, d, &QQuickComboBoxPrivate::updateHighlightedIndex);
+    d->deleteDelegate(d->popup);
     if (popup) {
         QQuickPopupPrivate::get(popup)->allowVerticalFlip = true;
         popup->setClosePolicy(QQuickPopup::CloseOnEscape | QQuickPopup::CloseOnPressOutsideParent);
+        QObjectPrivate::connect(popup, &QQuickPopup::visibleChanged, d, &QQuickComboBoxPrivate::updateHighlightedIndex);
     }
     d->popup = popup;
     emit popupChanged();
@@ -669,9 +682,16 @@ void QQuickComboBox::setPopup(QQuickPopup *popup)
 QString QQuickComboBox::textAt(int index) const
 {
     Q_D(const QQuickComboBox);
-    if (!d->delegateModel || index < 0 || index >= d->delegateModel->count() || !d->delegateModel->object(index))
+    if (!d->delegateModel || index < 0 || index >= d->delegateModel->count())
         return QString();
-    return d->delegateModel->stringValue(index, d->textRole.isEmpty() ? QStringLiteral("modelData") : d->textRole);
+
+    QString text;
+    QObject *object = d->delegateModel->object(index);
+    if (object) {
+        text = d->delegateModel->stringValue(index, d->textRole.isEmpty() ? QStringLiteral("modelData") : d->textRole);
+        d->delegateModel->release(object);
+    }
+    return text;
 }
 
 /*!

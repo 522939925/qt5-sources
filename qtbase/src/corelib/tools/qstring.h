@@ -803,7 +803,9 @@ private:
     Data *d;
 
     void reallocData(uint alloc, bool grow = false);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     void expand(int i);
+#endif
     QString multiArg(int numArgs, const QString **args) const;
     static int compare_helper(const QChar *data1, int length1,
                               const QChar *data2, int length2,
@@ -956,6 +958,7 @@ inline QString QString::section(QChar asep, int astart, int aend, SectionFlags a
 
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_MSVC(4127)   // "conditional expression is constant"
+QT_WARNING_DISABLE_INTEL(111)   // "statement is unreachable"
 
 inline int QString::toWCharArray(wchar_t *array) const
 {
@@ -990,7 +993,7 @@ public:
     inline operator QChar() const
     { return i < s.d->size ? s.d->data()[i] : 0; }
     inline QCharRef &operator=(QChar c)
-    { if (i >= s.d->size) s.expand(i); else s.detach();
+    { if (i >= s.d->size) s.resize(i + 1, QLatin1Char(' ')); else s.detach();
       s.d->data()[i] = c.unicode(); return *this; }
 
     // An operator= for each QChar cast constructors
@@ -1137,21 +1140,21 @@ inline bool operator!=(QString::Null, const QString &s) { return !s.isNull(); }
 inline bool operator!=(const QString &s, QString::Null) { return !s.isNull(); }
 
 inline bool operator==(QLatin1String s1, QLatin1String s2) Q_DECL_NOTHROW
-{ return (s1.size() == s2.size() && !memcmp(s1.latin1(), s2.latin1(), s1.size())); }
+{ return s1.size() == s2.size() && (!s1.size() || !memcmp(s1.latin1(), s2.latin1(), s1.size())); }
 inline bool operator!=(QLatin1String s1, QLatin1String s2) Q_DECL_NOTHROW
-{ return (s1.size() != s2.size() || memcmp(s1.latin1(), s2.latin1(), s1.size())); }
+{ return !operator==(s1, s2); }
 inline bool operator<(QLatin1String s1, QLatin1String s2) Q_DECL_NOTHROW
-{ int r = memcmp(s1.latin1(), s2.latin1(), qMin(s1.size(), s2.size()));
-  return (r < 0) || (r == 0 && s1.size() < s2.size()); }
-inline bool operator<=(QLatin1String s1, QLatin1String s2) Q_DECL_NOTHROW
-{ int r = memcmp(s1.latin1(), s2.latin1(), qMin(s1.size(), s2.size()));
-  return (r < 0) || (r == 0 && s1.size() <= s2.size()); }
+{
+    const int len = qMin(s1.size(), s2.size());
+    const int r = len ? memcmp(s1.latin1(), s2.latin1(), len) : 0;
+    return r < 0 || (r == 0 && s1.size() < s2.size());
+}
 inline bool operator>(QLatin1String s1, QLatin1String s2) Q_DECL_NOTHROW
-{ int r = memcmp(s1.latin1(), s2.latin1(), qMin(s1.size(), s2.size()));
-  return (r > 0) || (r == 0 && s1.size() > s2.size()); }
+{ return operator<(s2, s1); }
+inline bool operator<=(QLatin1String s1, QLatin1String s2) Q_DECL_NOTHROW
+{ return !operator>(s1, s2); }
 inline bool operator>=(QLatin1String s1, QLatin1String s2) Q_DECL_NOTHROW
-{ int r = memcmp(s1.latin1(), s2.latin1(), qMin(s1.size(), s2.size()));
-  return (r > 0) || (r == 0 && s1.size() >= s2.size()); }
+{ return !operator<(s1, s2); }
 
 inline bool QLatin1String::operator==(const QString &s) const Q_DECL_NOTHROW
 { return s == *this; }

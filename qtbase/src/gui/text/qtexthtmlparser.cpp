@@ -60,7 +60,7 @@ QT_BEGIN_NAMESPACE
 
 // see also tst_qtextdocumentfragment.cpp
 #define MAX_ENTITY 258
-static const struct QTextHtmlEntity { const char *name; quint16 code; } entities[MAX_ENTITY]= {
+static const struct QTextHtmlEntity { const char name[9]; quint16 code; } entities[]= {
     { "AElig", 0x00c6 },
     { "AMP", 38 },
     { "Aacute", 0x00c1 },
@@ -320,6 +320,7 @@ static const struct QTextHtmlEntity { const char *name; quint16 code; } entities
     { "zwj", 0x200d },
     { "zwnj", 0x200c }
 };
+Q_STATIC_ASSERT(MAX_ENTITY == sizeof entities / sizeof *entities);
 
 #if defined(Q_CC_MSVC) && _MSC_VER < 1600
 bool operator<(const QTextHtmlEntity &entity1, const QTextHtmlEntity &entity2)
@@ -665,7 +666,7 @@ void QTextHtmlParser::parseTag()
     if (hasPrefix(QLatin1Char('/'))) {
         if (nodes.last().id == Html_style) {
 #ifndef QT_NO_CSSPARSER
-            QCss::Parser parser(nodes.last().text);
+            QCss::Parser parser(nodes.constLast().text);
             QCss::StyleSheet sheet;
             sheet.origin = QCss::StyleSheetOrigin_Author;
             parser.parse(&sheet, Qt::CaseInsensitive);
@@ -1418,16 +1419,16 @@ static bool setFloatAttribute(qreal *destination, const QString &value)
     return ok;
 }
 
-static void setWidthAttribute(QTextLength *width, QString value)
+static void setWidthAttribute(QTextLength *width, const QString &valueStr)
 {
     bool ok = false;
-    qreal realVal = value.toDouble(&ok);
+    qreal realVal = valueStr.toDouble(&ok);
     if (ok) {
         *width = QTextLength(QTextLength::FixedLength, realVal);
     } else {
-        value = value.trimmed();
+        QStringRef value = QStringRef(&valueStr).trimmed();
         if (!value.isEmpty() && value.endsWith(QLatin1Char('%'))) {
-            value.chop(1);
+            value.truncate(value.size() - 1);
             realVal = value.toDouble(&ok);
             if (ok)
                 *width = QTextLength(QTextLength::PercentageLength, realVal);
@@ -1438,9 +1439,7 @@ static void setWidthAttribute(QTextLength *width, QString value)
 #ifndef QT_NO_CSSPARSER
 void QTextHtmlParserNode::parseStyleAttribute(const QString &value, const QTextDocument *resourceProvider)
 {
-    QString css = value;
-    css.prepend(QLatin1String("* {"));
-    css.append(QLatin1Char('}'));
+    const QString css = QLatin1String("* {") + value + QLatin1Char('}');
     QCss::Parser parser(css);
     QCss::StyleSheet sheet;
     parser.parse(&sheet, Qt::CaseInsensitive);

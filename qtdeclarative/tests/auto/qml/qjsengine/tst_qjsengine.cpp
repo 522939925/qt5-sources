@@ -138,6 +138,7 @@ private slots:
 
     void arrayPop_QTBUG_35979();
     void array_unshift_QTBUG_52065();
+    void array_join_QTBUG_53672();
 
     void regexpLastMatch();
     void indexedAccesses();
@@ -187,6 +188,8 @@ private slots:
     void argumentEvaluationOrder();
 
     void v4FunctionWithoutQML();
+
+    void withNoContext();
 
 signals:
     void testSignal();
@@ -2001,6 +2004,15 @@ void tst_QJSEngine::jsNumberClass()
         QJSValue ret = eng.evaluate("new Number(123).toPrecision()");
         QVERIFY(ret.isString());
         QCOMPARE(ret.toString(), QString::fromLatin1("123"));
+        ret = eng.evaluate("new Number(42).toPrecision(1)");
+        QVERIFY(ret.isString());
+        QCOMPARE(ret.toString(), QString::fromLatin1("4e+1"));
+        ret = eng.evaluate("new Number(42).toPrecision(2)");
+        QVERIFY(ret.isString());
+        QCOMPARE(ret.toString(), QString::fromLatin1("42"));
+        ret = eng.evaluate("new Number(42).toPrecision(3)");
+        QVERIFY(ret.isString());
+        QCOMPARE(ret.toString(), QString::fromLatin1("42.0"));
     }
 }
 
@@ -3009,6 +3021,14 @@ void tst_QJSEngine::array_unshift_QTBUG_52065()
         QCOMPARE(result.property(i).toInt(), i);
 }
 
+void tst_QJSEngine::array_join_QTBUG_53672()
+{
+    QJSEngine eng;
+    QJSValue result = eng.evaluate("Array.prototype.join.call(0)");
+    QVERIFY(result.isString());
+    QCOMPARE(result.toString(), QString(""));
+}
+
 void tst_QJSEngine::regexpLastMatch()
 {
     QJSEngine eng;
@@ -3833,6 +3853,13 @@ void tst_QJSEngine::v4FunctionWithoutQML()
     QVERIFY(!obj.called);
     wrapper.property("callMe").call();
     QVERIFY(obj.called);
+}
+
+void tst_QJSEngine::withNoContext()
+{
+    // Don't crash (QTBUG-53794)
+    QJSEngine engine;
+    engine.evaluate("with (noContext) true");
 }
 
 QTEST_MAIN(tst_QJSEngine)

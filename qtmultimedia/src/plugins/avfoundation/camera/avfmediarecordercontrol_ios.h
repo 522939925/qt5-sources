@@ -45,6 +45,7 @@
 #include "avfcamerautility.h"
 
 #include <QtMultimedia/qmediarecordercontrol.h>
+#include <private/qvideooutputorientationhandler_p.h>
 
 #include <QtCore/qglobal.h>
 #include <QtCore/qurl.h>
@@ -76,6 +77,7 @@ public:
     qreal volume() const Q_DECL_OVERRIDE;
 
     void applySettings() Q_DECL_OVERRIDE;
+    void unapplySettings();
 
 public Q_SLOTS:
     void setState(QMediaRecorder::State state) Q_DECL_OVERRIDE;
@@ -95,8 +97,6 @@ private:
     void stopWriter();
 
     AVFCameraService *m_service;
-
-    AVFScopedPointer<dispatch_queue_t> m_writerQueue;
     AVFScopedPointer<QT_MANGLE_NAMESPACE(AVFMediaAssetWriter)> m_writer;
 
     QUrl m_outputLocation;
@@ -104,6 +104,10 @@ private:
 
     QMediaRecorder::State m_state;
     QMediaRecorder::Status m_lastStatus;
+
+    NSDictionary *m_audioSettings;
+    NSDictionary *m_videoSettings;
+    QVideoOutputOrientationHandler m_orientationHandler;
 };
 
 QT_END_NAMESPACE

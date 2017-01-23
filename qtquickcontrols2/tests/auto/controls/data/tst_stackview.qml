@@ -406,6 +406,11 @@ TestCase {
         compare(control.depth, 6)
         compare(control.currentItem, items[5])
 
+        // pop down to the current item
+        compare(control.pop(control.currentItem, StackView.Immediate), null)
+        compare(control.depth, 6)
+        compare(control.currentItem, items[5])
+
         // pop down to (but not including) the Nth item
         compare(control.pop(items[3], StackView.Immediate), items[5])
         compare(control.depth, 4)
@@ -853,6 +858,24 @@ TestCase {
         var rect = control.push(rectangle, {color: "#ff0000"})
         compare(rect.color, "#ff0000")
         compare(rect.initialColor, "#ff0000")
+
+        control.destroy()
+    }
+
+    // QTBUG-56158
+    function test_repeatedPop() {
+        var control = stackView.createObject(testCase, {initialItem: component, width: testCase.width, height: testCase.height})
+        verify(control)
+
+        for (var i = 0; i < 12; ++i)
+            control.push(component)
+        tryCompare(control, "busy", false)
+
+        while (control.depth > 1) {
+            control.pop()
+            wait(50)
+        }
+        tryCompare(control, "busy", false)
 
         control.destroy()
     }

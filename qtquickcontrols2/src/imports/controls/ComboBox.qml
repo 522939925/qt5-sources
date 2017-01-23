@@ -58,7 +58,7 @@ T.ComboBox {
 
     //! [delegate]
     delegate: ItemDelegate {
-        width: control.width
+        width: control.popup.width
         text: control.textRole ? (Array.isArray(control.model) ? modelData[control.textRole] : model[control.textRole]) : modelData
         font.weight: control.currentIndex === index ? Font.DemiBold : Font.Normal
         highlighted: control.highlightedIndex == index
@@ -105,15 +105,18 @@ T.ComboBox {
     popup: T.Popup {
         y: control.height - (control.visualFocus ? 0 : 1)
         width: control.width
-        implicitHeight: listview.contentHeight
+        implicitHeight: contentItem.implicitHeight
         topMargin: 6
         bottomMargin: 6
 
         contentItem: ListView {
             id: listview
             clip: true
+            implicitHeight: contentHeight
             model: control.popup.visible ? control.delegateModel : null
             currentIndex: control.highlightedIndex
+            highlightRangeMode: ListView.ApplyRange
+            highlightMoveDuration: 0
 
             Rectangle {
                 z: 10

@@ -88,7 +88,7 @@ struct Scope {
         memset(mark, 0, (engine->jsStackTop - mark)*sizeof(Value));
 #endif
 #ifdef V4_USE_VALGRIND
-        VALGRIND_MAKE_MEM_UNDEFINED(mark, engine->jsStackLimit - mark);
+        VALGRIND_MAKE_MEM_UNDEFINED(mark, (engine->jsStackLimit - mark) * sizeof(Value));
 #endif
         engine->jsStackTop = mark;
     }
@@ -126,9 +126,6 @@ struct ScopedValue
     {
         ptr = scope.engine->jsStackTop++;
         ptr->setM(o);
-#ifndef QV4_USE_64_BIT_VALUE_ENCODING
-        ptr->setTag(QV4::Value::Managed_Type);
-#endif
     }
 
     ScopedValue(const Scope &scope, Managed *m)
@@ -150,9 +147,6 @@ struct ScopedValue
 
     ScopedValue &operator=(Heap::Base *o) {
         ptr->setM(o);
-#ifndef QV4_USE_64_BIT_VALUE_ENCODING
-        ptr->setTag(QV4::Value::Managed_Type);
-#endif
         return *this;
     }
 
@@ -192,18 +186,12 @@ struct Scoped
 
     inline void setPointer(const Managed *p) {
         ptr->setM(p ? p->m() : 0);
-#ifndef QV4_USE_64_BIT_VALUE_ENCODING
-        ptr->setTag(QV4::Value::Managed_Type);
-#endif
     }
 
     Scoped(const Scope &scope)
     {
         ptr = scope.engine->jsStackTop++;
         ptr->setM(0);
-#ifndef QV4_USE_64_BIT_VALUE_ENCODING
-        ptr->setTag(QV4::Value::Managed_Type);
-#endif
     }
 
     Scoped(const Scope &scope, const Value &v)
@@ -327,7 +315,7 @@ struct ScopedCallData {
     {
         int size = qMax(argc, (int)QV4::Global::ReservedArgumentCount) + qOffsetOf(QV4::CallData, args)/sizeof(QV4::Value);
         ptr = reinterpret_cast<CallData *>(scope.alloc(size));
-        ptr->tag = QV4::Value::Integer_Type;
+        ptr->tag = QV4::Value::Integer_Type_Internal;
         ptr->argc = argc;
     }
 
@@ -345,14 +333,14 @@ struct ScopedCallData {
 
 inline Value &Value::operator =(const ScopedValue &v)
 {
-    _val = v.ptr->val();
+    _val = v.ptr->rawValue();
     return *this;
 }
 
 template<typename T>
 inline Value &Value::operator=(const Scoped<T> &t)
 {
-    _val = t.ptr->val();
+    _val = t.ptr->rawValue();
     return *this;
 }
 

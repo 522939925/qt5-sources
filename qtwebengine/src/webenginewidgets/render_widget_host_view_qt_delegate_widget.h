@@ -91,7 +91,7 @@ protected:
     void initializeGL() Q_DECL_OVERRIDE;
     void paintGL() Q_DECL_OVERRIDE;
 
-    QVariant inputMethodQuery(Qt::InputMethodQuery query) const;
+    QVariant inputMethodQuery(Qt::InputMethodQuery query) const Q_DECL_OVERRIDE;
 
 private slots:
     void onWindowPosChanged();
@@ -104,6 +104,7 @@ private:
     QScopedPointer<QSGAbstractRenderer> m_sgRenderer;
     bool m_isPopup;
     QColor m_clearColor;
+    QPoint m_lastGlobalPos;
     QList<QMetaObject::Connection> m_windowConnections;
 };
 

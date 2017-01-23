@@ -199,6 +199,10 @@ static inline unsigned parseOptions(const QStringList &paramList,
             }
         } else if (param == QLatin1String("gl=gdi")) {
             options |= QWindowsIntegration::DisableArb;
+        } else if (param == QLatin1String("nodirectwrite")) {
+            options |= QWindowsIntegration::DontUseDirectWriteFonts;
+        } else if (param == QLatin1String("nocolorfonts")) {
+            options |= QWindowsIntegration::DontUseColorFonts;
         } else if (param == QLatin1String("nomousefromtouch")) {
             options |= QWindowsIntegration::DontPassOsMouseEventsSynthesizedFromTouch;
         } else if (parseIntOption(param, QLatin1String("verbose"), 0, INT_MAX, &QWindowsContext::verbose)
@@ -311,7 +315,12 @@ QPlatformWindow *QWindowsIntegration::createPlatformWindow(QWindow *window) cons
     }
 
     if (window->type() == Qt::ForeignWindow) {
-        QWindowsForeignWindow *result = new QWindowsForeignWindow(window, reinterpret_cast<HWND>(window->winId()));
+        const HWND hwnd = reinterpret_cast<HWND>(window->winId());
+        if (!IsWindow(hwnd)) {
+           qWarning("Windows QPA: Invalid foreign window ID %p.", hwnd);
+           return nullptr;
+        }
+        QWindowsForeignWindow *result = new QWindowsForeignWindow(window, hwnd);
         const QRect obtainedGeometry = result->geometry();
         QScreen *screen = Q_NULLPTR;
         if (const QPlatformScreen *pScreen = result->screenForGeometry(obtainedGeometry))
@@ -331,7 +340,9 @@ QPlatformWindow *QWindowsIntegration::createPlatformWindow(QWindow *window) cons
     if (customMarginsV.isValid())
         requested.customMargins = qvariant_cast<QMargins>(customMarginsV);
 
-    QWindowsWindowData obtained = QWindowsWindowData::create(window, requested, window->title());
+    QWindowsWindowData obtained =
+        QWindowsWindowData::create(window, requested,
+                                   QWindowsWindow::formatWindowTitle(window->title()));
     qCDebug(lcQpaWindows).nospace()
         << __FUNCTION__ << ' ' << window
         << "\n    Requested: " << requested.geometry << " frame incl.="

@@ -98,7 +98,8 @@ enum QtModule
     Qt3DInputModule           = 0x0000200000000000,
     QtLocationModule          = 0x0000400000000000,
     QtWebChannelModule        = 0x0000800000000000,
-    QtTextToSpeechModule      = 0x0001000000000000
+    QtTextToSpeechModule      = 0x0001000000000000,
+    QtSerialBusModule         = 0x0002000000000000
 };
 
 struct QtModuleEntry {
@@ -156,7 +157,8 @@ static QtModuleEntry qtModuleEntries[] = {
     { Qt3DInputModule, "3dinput", "Qt53DInput", 0 },
     { QtLocationModule, "geoservices", "Qt5Location", 0 },
     { QtWebChannelModule, "webchannel", "Qt5WebChannel", 0 },
-    { QtTextToSpeechModule, "texttospeech", "Qt5TextToSpeech", 0 }
+    { QtTextToSpeechModule, "texttospeech", "Qt5TextToSpeech", 0 },
+    { QtSerialBusModule, "serialbus", "Qt5SerialBus", 0 }
 };
 
 static const char webKitProcessC[] = "QtWebProcess";
@@ -249,7 +251,7 @@ struct Options {
               , angleDetection(AngleDetectionAuto), softwareRasterizer(true), platform(Windows)
               , additionalLibraries(0), disabledLibraries(0)
               , updateFileFlags(0), json(0), list(ListNone), debugDetection(DebugDetectionAuto)
-              , deployPdb(false) {}
+              , deployPdb(false), dryRun(false) {}
 
     bool plugins;
     bool libraries;
@@ -273,6 +275,7 @@ struct Options {
     ListOption list;
     DebugDetection debugDetection;
     bool deployPdb;
+    bool dryRun;
 
     inline bool isWinRtOrWinPhone() const {
         return (platform == WinPhoneArm || platform == WinPhoneIntel
@@ -523,8 +526,10 @@ static inline int parseArguments(const QStringList &arguments, QCommandLineParse
 
     if (parser->isSet(forceOption))
         options->updateFileFlags |= ForceUpdateFile;
-    if (parser->isSet(dryRunOption))
+    if (parser->isSet(dryRunOption)) {
+        options->dryRun = true;
         options->updateFileFlags |= SkipUpdateFile;
+    }
 
     for (size_t i = 0; i < qtModulesCount; ++i) {
         if (parser->isSet(*enabledModules.at(int(i)).first.data()))
@@ -810,6 +815,8 @@ static inline quint64 qtModuleForPlugin(const QString &subDirName)
         return Qt3DRendererModule;
     if (subDirName == QLatin1String("texttospeech"))
         return QtTextToSpeechModule;
+    if (subDirName == QLatin1String("canbus"))
+        return QtSerialBusModule;
     return 0; // "designer"
 }
 
@@ -1345,6 +1352,33 @@ static DeployResult deploy(const Options &options,
         }
     } // Windows
 
+    // We need to copy ucrtbased.dll on WinRT as this library is not part of
+    // the c runtime package. VS 2015 does the same when deploying to a device
+    // or creating an appx.
+    if (isDebug && options.platform == WinRtArm
+             && qmakeVariables.value(QStringLiteral("QMAKE_XSPEC")).endsWith(QLatin1String("msvc2015"))) {
+        const QString extensionPath = QString::fromLocal8Bit(qgetenv("ExtensionSdkDir"));
+        const QString ucrtVersion = QString::fromLocal8Bit(qgetenv("UCRTVersion"));
+        if (extensionPath.isEmpty() || ucrtVersion.isEmpty()) {
+            std::wcerr << "Warning: Cannot find ucrtbased.dll as either "
+                << "ExtensionSdkDir or UCRTVersion is not set in "
+                << "your environment.\n";
+        } else {
+            const QString ucrtbasedLib = extensionPath
+                    + QStringLiteral("/Microsoft.UniversalCRT.Debug/")
+                    + ucrtVersion
+                    + QStringLiteral("/Redist/Debug/arm/ucrtbased.dll");
+            const QFileInfo ucrtPath(ucrtbasedLib);
+            if (ucrtPath.exists() && ucrtPath.isFile()) {
+                deployedQtLibraries.append(ucrtPath.absoluteFilePath());
+            } else {
+                std::wcerr << "Warning: Cannot find ucrtbased.dll at "
+                           << QDir::toNativeSeparators(ucrtbasedLib)
+                           << " or it is not a file.\n";
+            }
+        }
+    }
+
     // Update libraries
     if (options.libraries) {
         const QString targetPath = options.libraryDirectory.isEmpty() ?
@@ -1357,7 +1391,7 @@ static DeployResult deploy(const Options &options,
                 return result;
         }
 
-        if (!options.isWinRtOrWinPhone()) {
+        if (!options.isWinRtOrWinPhone() && !options.dryRun) {
             const QString qt5CoreName = QFileInfo(libraryPath(libraryLocation, "Qt5Core", qtLibInfix,
                                                               options.platform, isDebug)).fileName();
 
@@ -1435,10 +1469,11 @@ static DeployResult deploy(const Options &options,
     } // optQuickImports
 
     if (options.translations) {
-        if (!createDirectory(options.translationsDirectory, errorMessage)
-            || !deployTranslations(qmakeVariables.value(QStringLiteral("QT_INSTALL_TRANSLATIONS")),
-                                   result.deployedQtLibraries, options.translationsDirectory,
-                                   options.updateFileFlags, errorMessage)) {
+        if (!options.dryRun && !createDirectory(options.translationsDirectory, errorMessage))
+            return result;
+        if (!deployTranslations(qmakeVariables.value(QStringLiteral("QT_INSTALL_TRANSLATIONS")),
+                                result.deployedQtLibraries, options.translationsDirectory,
+                                options.updateFileFlags, errorMessage)) {
             return result;
         }
     }

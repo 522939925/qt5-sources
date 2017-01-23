@@ -474,7 +474,8 @@ QT_WARNING_POP
             NSUInteger screenIndex = [[NSScreen screens] indexOfObject:self.window.screen];
             if (screenIndex != NSNotFound) {
                 QCocoaScreen *cocoaScreen = QCocoaIntegration::instance()->screenAtIndex(screenIndex);
-                QWindowSystemInterface::handleWindowScreenChanged(m_window, cocoaScreen->screen());
+                if (cocoaScreen)
+                    QWindowSystemInterface::handleWindowScreenChanged(m_window, cocoaScreen->screen());
                 m_platformWindow->updateExposedGeometry();
             }
         }
@@ -758,7 +759,10 @@ QT_WARNING_POP
 
 - (void)handleMouseEvent:(NSEvent *)theEvent
 {
-    bool isTabletEvent = [self handleTabletEvent: theEvent];
+    // Tablet events may come in via the mouse event handlers,
+    // check if this is a valid tablet event first.
+    if ([self handleTabletEvent: theEvent])
+        return;
 
     QPointF qtWindowPoint;
     QPointF qtScreenPoint;
@@ -787,8 +791,8 @@ QT_WARNING_POP
     nativeDrag->setLastMouseEvent(theEvent, self);
 
     Qt::KeyboardModifiers keyboardModifiers = [QNSView convertKeyModifiers:[theEvent modifierFlags]];
-    QWindowSystemInterface::handleMouseEvent(targetView->m_window, timestamp, qtWindowPoint, qtScreenPoint, m_buttons, keyboardModifiers,
-                                             isTabletEvent ? Qt::MouseEventSynthesizedByQt : Qt::MouseEventNotSynthesized);
+    QWindowSystemInterface::handleMouseEvent(targetView->m_window, timestamp, qtWindowPoint, qtScreenPoint,
+                                             m_buttons, keyboardModifiers, Qt::MouseEventNotSynthesized);
 }
 
 - (void)handleFrameStrutMouseEvent:(NSEvent *)theEvent
@@ -1133,7 +1137,7 @@ QT_WARNING_POP
 
     QPointF windowPoint;
     QPointF screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
+    [self convertFromScreen:[self screenMousePoint:theEvent] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
     m_platformWindow->m_enterLeaveTargetWindow = m_platformWindow->childWindowAt(windowPoint.toPoint());
     QWindowSystemInterface::handleEnterEvent(m_platformWindow->m_enterLeaveTargetWindow, windowPoint, screenPoint);
 }
@@ -1175,7 +1179,7 @@ Q_GLOBAL_STATIC(QCocoaTabletDeviceDataHash, tabletDeviceDataHash)
 
     QPointF windowPoint;
     QPointF screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint: &windowPoint andScreenPoint: &screenPoint];
+    [self convertFromScreen:[self screenMousePoint:theEvent] toWindowPoint: &windowPoint andScreenPoint: &screenPoint];
 
     uint deviceId = [theEvent deviceID];
     if (!tabletDeviceDataHash->contains(deviceId)) {
@@ -1390,7 +1394,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
     const NSTimeInterval timestamp = [event timestamp];
     QPointF windowPoint;
     QPointF screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
+    [self convertFromScreen:[self screenMousePoint:event] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
     QWindowSystemInterface::handleGestureEventWithRealValue(m_window, timestamp, Qt::ZoomNativeGesture,
                                                             [event magnification], windowPoint, screenPoint);
 }
@@ -1403,7 +1407,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
     const NSTimeInterval timestamp = [event timestamp];
     QPointF windowPoint;
     QPointF screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
+    [self convertFromScreen:[self screenMousePoint:event] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
     QWindowSystemInterface::handleGestureEventWithRealValue(m_window, timestamp, Qt::SmartZoomNativeGesture,
                                                             zoomIn ? 1.0f : 0.0f, windowPoint, screenPoint);
     zoomIn = !zoomIn;
@@ -1418,7 +1422,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
     const NSTimeInterval timestamp = [event timestamp];
     QPointF windowPoint;
     QPointF screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
+    [self convertFromScreen:[self screenMousePoint:event] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
     QWindowSystemInterface::handleGestureEventWithRealValue(m_window, timestamp, Qt::RotateNativeGesture,
                                                             -[event rotation], windowPoint, screenPoint);
 }
@@ -1429,7 +1433,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
     const NSTimeInterval timestamp = [event timestamp];
     QPointF windowPoint;
     QPointF screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
+    [self convertFromScreen:[self screenMousePoint:event] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
 
     qreal angle = 0.0f;
     if ([event deltaX] == 1)
@@ -1450,7 +1454,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
     const NSTimeInterval timestamp = [event timestamp];
     QPointF windowPoint;
     QPointF screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
+    [self convertFromScreen:[self screenMousePoint:event] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
     qCDebug(lcQpaGestures) << "beginGestureWithEvent @" << windowPoint;
     QWindowSystemInterface::handleGestureEvent(m_window, timestamp, Qt::BeginNativeGesture,
                                                windowPoint, screenPoint);
@@ -1462,7 +1466,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
     const NSTimeInterval timestamp = [event timestamp];
     QPointF windowPoint;
     QPointF screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
+    [self convertFromScreen:[self screenMousePoint:event] toWindowPoint:&windowPoint andScreenPoint:&screenPoint];
     QWindowSystemInterface::handleGestureEvent(m_window, timestamp, Qt::EndNativeGesture,
                                                windowPoint, screenPoint);
 }
@@ -1506,7 +1510,7 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
 
     QPointF qt_windowPoint;
     QPointF qt_screenPoint;
-    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint:&qt_windowPoint andScreenPoint:&qt_screenPoint];
+    [self convertFromScreen:[self screenMousePoint:theEvent] toWindowPoint:&qt_windowPoint andScreenPoint:&qt_screenPoint];
     NSTimeInterval timestamp = [theEvent timestamp];
     ulong qt_timestamp = timestamp * 1000;
 
@@ -1661,12 +1665,18 @@ static QTabletEvent::TabletDevice wacomTabletDevice(NSEvent *theEvent)
 
     const bool accepted = [self handleKeyEvent:nsevent eventType:int(QEvent::KeyPress)];
 
-    // Track keyDown acceptance state for later acceptance of the keyUp.
-    if (accepted)
+    // When Qt is used to implement a plugin for a native application we
+    // want to propagate unhandled events to other native views. However,
+    // Qt does not always set the accepted state correctly (in particular
+    // for return key events), so do this for plugin applications only
+    // to prevent incorrect forwarding in the general case.
+    const bool shouldPropagate = QCoreApplication::testAttribute(Qt::AA_PluginApplication) && !accepted;
+
+    // Track keyDown acceptance/forward state for later acceptance of the keyUp.
+    if (!shouldPropagate)
         m_acceptedKeyDowns.insert([nsevent keyCode]);
 
-    // Propagate the keyDown to the next responder if Qt did not accept it.
-    if (!accepted)
+    if (shouldPropagate)
         [super keyDown:nsevent];
 }
 
@@ -2029,16 +2039,27 @@ static QPoint mapWindowCoordinates(QWindow *source, QWindow *target, QPoint poin
     return target->mapFromGlobal(source->mapToGlobal(point));
 }
 
-- (NSDragOperation) draggingSourceOperationMaskForLocal:(BOOL)isLocal
+- (NSDragOperation)draggingSession:(NSDraggingSession *)session
+  sourceOperationMaskForDraggingContext:(NSDraggingContext)context
 {
-    Q_UNUSED(isLocal);
+    Q_UNUSED(session);
+    Q_UNUSED(context);
     QCocoaDrag* nativeDrag = QCocoaIntegration::instance()->drag();
     return qt_mac_mapDropActions(nativeDrag->currentDrag()->supportedActions());
 }
 
-- (BOOL) ignoreModifierKeysWhileDragging
+- (BOOL)ignoreModifierKeysForDraggingSession:(NSDraggingSession *)session
 {
-    return NO;
+    Q_UNUSED(session);
+    // According to the "Dragging Sources" chapter on Cocoa DnD Programming
+    // (https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/DragandDrop/Concepts/dragsource.html),
+    // if the control, option, or command key is pressed, the source’s
+    // operation mask is filtered to only contain a reduced set of operations.
+    //
+    // Since Qt already takes care of tracking the keyboard modifiers, we
+    // don't need (or want) Cocoa to filter anything. Instead, we'll let
+    // the application do the actual filtering.
+    return YES;
 }
 
 - (BOOL)wantsPeriodicDraggingUpdates
@@ -2195,23 +2216,27 @@ static QPoint mapWindowCoordinates(QWindow *source, QWindow *target, QPoint poin
     return response.isAccepted();
 }
 
-- (void)draggedImage:(NSImage*) img endedAt:(NSPoint) point operation:(NSDragOperation) operation
+- (void)draggingSession:(NSDraggingSession *)session
+           endedAtPoint:(NSPoint)screenPoint
+              operation:(NSDragOperation)operation
 {
-    Q_UNUSED(img);
+    Q_UNUSED(session);
     Q_UNUSED(operation);
     QWindow *target = findEventTargetWindow(m_window);
     if (!target)
         return;
 
-// keep our state, and QGuiApplication state (buttons member) in-sync,
-// or future mouse events will be processed incorrectly
-    m_buttons &= ~(m_sendUpAsRightButton ? Qt::RightButton : Qt::LeftButton);
+    // keep our state, and QGuiApplication state (buttons member) in-sync,
+    // or future mouse events will be processed incorrectly
+    NSUInteger pmb = [NSEvent pressedMouseButtons];
+    for (int buttonNumber = 0; buttonNumber < 32; buttonNumber++) { // see cocoaButton2QtButton() for the 32 value
+        if (!(pmb & (1 << buttonNumber)))
+            m_buttons &= ~cocoaButton2QtButton(buttonNumber);
+    }
 
-    NSPoint windowPoint = [self convertPoint: point fromView: nil];
+    NSPoint windowPoint = [self.window convertRectFromScreen:NSMakeRect(screenPoint.x, screenPoint.y, 1, 1)].origin;
     QPoint qtWindowPoint(windowPoint.x, windowPoint.y);
 
-    NSWindow *window = [self window];
-    NSPoint screenPoint = [window convertRectToScreen:NSMakeRect(point.x, point.y, 0, 0)].origin;
     QPoint qtScreenPoint = QPoint(screenPoint.x, qt_mac_flipYCoordinate(screenPoint.y));
 
     QWindowSystemInterface::handleMouseEvent(target, mapWindowCoordinates(m_window, target, qtWindowPoint), qtScreenPoint, m_buttons);

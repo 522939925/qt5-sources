@@ -1805,11 +1805,12 @@ QStandardItem *QStandardItem::takeChild(int row, int column)
 QList<QStandardItem*> QStandardItem::takeRow(int row)
 {
     Q_D(QStandardItem);
+    QList<QStandardItem*> items;
     if ((row < 0) || (row >= rowCount()))
-        return QList<QStandardItem*>();
+        return items;
     if (d->model)
         d->model->d_func()->rowsAboutToBeRemoved(this, row, row);
-    QList<QStandardItem*> items;
+
     int index = d->childIndex(row, 0);  // Will return -1 if there are no columns
     if (index != -1) {
         int col_count = d->columnCount();
@@ -1838,13 +1839,15 @@ QList<QStandardItem*> QStandardItem::takeRow(int row)
 QList<QStandardItem*> QStandardItem::takeColumn(int column)
 {
     Q_D(QStandardItem);
+    QList<QStandardItem*> items;
     if ((column < 0) || (column >= columnCount()))
-        return QList<QStandardItem*>();
+        return items;
     if (d->model)
         d->model->d_func()->columnsAboutToBeRemoved(this, column, column);
-    QList<QStandardItem*> items;
 
-    for (int row = d->rowCount() - 1; row >= 0; --row) {
+    const int rowCount = d->rowCount();
+    items.reserve(rowCount);
+    for (int row = rowCount - 1; row >= 0; --row) {
         int index = d->childIndex(row, column);
         QStandardItem *ch = d->children.at(index);
         if (ch)
@@ -3027,10 +3030,7 @@ QMimeData *QStandardItemModel::mimeData(const QModelIndexList &indexes) const
             for (int i = 0; i < childList.count(); ++i) {
                 QStandardItem *chi = childList.at(i);
                 if (chi) {
-                    QSet<QStandardItem *>::iterator it = itemsSet.find(chi);
-                    if (it != itemsSet.end()) {
-                        itemsSet.erase(it);
-                    }
+                    itemsSet.erase(itemsSet.constFind(chi));
                     stack.push(chi);
                 }
             }
@@ -3139,13 +3139,13 @@ bool QStandardItemModel::dropMimeData(const QMimeData *data, Qt::DropAction acti
     for (int i = 0; i < rows.count(); ++i)
         rowsToInsert[rows.at(i)] = 1;
     for (int i = 0; i < rowsToInsert.count(); ++i) {
-        if (rowsToInsert[i] == 1){
+        if (rowsToInsert.at(i) == 1){
             rowsToInsert[i] = dragRowCount;
             ++dragRowCount;
         }
     }
     for (int i = 0; i < rows.count(); ++i)
-        rows[i] = top + rowsToInsert[rows[i]];
+        rows[i] = top + rowsToInsert.at(rows.at(i));
 
     QBitArray isWrittenTo(dragRowCount * dragColumnCount);
 

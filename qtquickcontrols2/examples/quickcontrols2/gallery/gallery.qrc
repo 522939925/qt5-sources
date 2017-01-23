@@ -10,6 +10,10 @@
         <file>images/arrows@2x.png</file>
         <file>images/arrows@3x.png</file>
         <file>images/arrows@4x.png</file>
+        <file>images/back.png</file>
+        <file>images/back@2x.png</file>
+        <file>images/back@3x.png</file>
+        <file>images/back@4x.png</file>
         <file>images/drawer.png</file>
         <file>images/drawer@2x.png</file>
         <file>images/drawer@3x.png</file>
@@ -18,6 +22,10 @@
         <file>images/menu@2x.png</file>
         <file>images/menu@3x.png</file>
         <file>images/menu@4x.png</file>
+        <file>images/+material/back.png</file>
+        <file>images/+material/back@2x.png</file>
+        <file>images/+material/back@3x.png</file>
+        <file>images/+material/back@4x.png</file>
         <file>images/+material/drawer.png</file>
         <file>images/+material/drawer@2x.png</file>
         <file>images/+material/drawer@3x.png</file>
@@ -44,6 +52,7 @@
         <file>pages/ProgressBarPage.qml</file>
         <file>pages/RadioButtonPage.qml</file>
         <file>pages/RangeSliderPage.qml</file>
+        <file>pages/ScrollablePage.qml</file>
         <file>pages/ScrollBarPage.qml</file>
         <file>pages/ScrollIndicatorPage.qml</file>
         <file>pages/SliderPage.qml</file>

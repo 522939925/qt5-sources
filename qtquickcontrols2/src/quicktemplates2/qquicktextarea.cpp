@@ -285,6 +285,9 @@ QQuickTextArea::QQuickTextArea(QQuickItem *parent) :
     setActiveFocusOnTab(true);
     d->setImplicitResizeEnabled(false);
     d->pressHandler.control = this;
+#ifndef QT_NO_CURSOR
+    setCursor(Qt::IBeamCursor);
+#endif
     QObjectPrivate::connect(this, &QQuickTextEdit::readOnlyChanged,
                             d, &QQuickTextAreaPrivate::_q_readOnlyChanged);
 }
@@ -360,6 +363,14 @@ QAccessible::Role QQuickTextAreaPrivate::accessibleRole() const
 }
 #endif
 
+void QQuickTextAreaPrivate::deleteDelegate(QObject *delegate)
+{
+    if (componentComplete)
+        delete delegate;
+    else
+        pendingDeletions.append(delegate);
+}
+
 QFont QQuickTextArea::font() const
 {
     return QQuickTextEdit::font();
@@ -398,7 +409,7 @@ void QQuickTextArea::setBackground(QQuickItem *background)
     if (d->background == background)
         return;
 
-    delete d->background;
+    d->deleteDelegate(d->background);
     d->background = background;
     if (background) {
         background->setParentItem(this);
@@ -471,6 +482,14 @@ void QQuickTextArea::setFocusReason(Qt::FocusReason reason)
     emit focusReasonChanged();
 }
 
+bool QQuickTextArea::contains(const QPointF &point) const
+{
+    Q_D(const QQuickTextArea);
+    if (d->flickable && !d->flickable->contains(d->flickable->mapFromItem(this, point)))
+        return false;
+    return QQuickTextEdit::contains(point);
+}
+
 void QQuickTextArea::classBegin()
 {
     Q_D(QQuickTextArea);
@@ -486,6 +505,9 @@ void QQuickTextArea::componentComplete()
     if (!d->accessibleAttached && QAccessible::isActive())
         d->accessibilityActiveChanged(true);
 #endif
+
+    qDeleteAll(d->pendingDeletions);
+    d->pendingDeletions.clear();
 }
 
 void QQuickTextArea::itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &value)
@@ -580,6 +602,16 @@ void QQuickTextArea::mouseReleaseEvent(QMouseEvent *event)
         }
         QQuickTextEdit::mouseReleaseEvent(event);
     }
+}
+
+void QQuickTextArea::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    Q_D(QQuickTextArea);
+    if (d->pressHandler.delayedMousePressEvent) {
+        QQuickTextEdit::mousePressEvent(d->pressHandler.delayedMousePressEvent);
+        d->pressHandler.clearDelayedMouseEvent();
+    }
+    QQuickTextEdit::mouseDoubleClickEvent(event);
 }
 
 void QQuickTextArea::timerEvent(QTimerEvent *event)

@@ -218,7 +218,7 @@ public:
     virtual void loadFinished(bool success, const QUrl &url, bool isErrorPage = false, int errorCode = 0, const QString &errorDescription = QString()) = 0;
     virtual void focusContainer() = 0;
     virtual void unhandledKeyEvent(QKeyEvent *event) = 0;
-    virtual void adoptNewWindow(WebContentsAdapter *newWebContents, WindowOpenDisposition disposition, bool userGesture, const QRect & initialGeometry) = 0;
+    virtual void adoptNewWindow(QSharedPointer<WebContentsAdapter> newWebContents, WindowOpenDisposition disposition, bool userGesture, const QRect & initialGeometry) = 0;
     virtual bool isBeingAdopted() = 0;
     virtual void close() = 0;
     virtual void windowCloseRejected() = 0;
@@ -257,6 +257,8 @@ public:
     virtual void updateContentsSize(const QSizeF &size) = 0;
     virtual void startDragging(const content::DropData &dropData, Qt::DropActions allowedActions,
                                const QPixmap &pixmap, const QPoint &offset) = 0;
+    virtual bool isEnabled() const = 0;
+    virtual const QObject *holdingQObject() const = 0;
 
     virtual QSharedPointer<BrowserContextAdapter> browserContextAdapter() = 0;
     virtual WebContentsAdapter* webContentsAdapter() = 0;

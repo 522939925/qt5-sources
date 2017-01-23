@@ -96,6 +96,10 @@ private slots:
     void flowControl_data();
     void flowControl();
 
+    void rts();
+    void dtr();
+    void independenceRtsAndDtr();
+
     void flush();
     void doubleFlush();
 
@@ -149,6 +153,7 @@ const QByteArray tst_QSerialPort::newlineArray("\n\r");
 
 tst_QSerialPort::tst_QSerialPort()
 {
+    qRegisterMetaType<QSerialPort::SerialPortError>("QSerialPort::SerialPortError");
 }
 
 void tst_QSerialPort::initTestCase()
@@ -466,6 +471,135 @@ void tst_QSerialPort::flowControl()
         QVERIFY(serialPort.setFlowControl(flowcontrol));
         QCOMPARE(serialPort.flowControl(), flowcontrol);
     }
+}
+
+void tst_QSerialPort::rts()
+{
+    QSerialPort serialPort(m_senderPortName);
+
+    QSignalSpy errorSpy(&serialPort, static_cast<void (QSerialPort::*)(QSerialPort::SerialPortError)>(&QSerialPort::error));
+    QVERIFY(errorSpy.isValid());
+    QSignalSpy rtsSpy(&serialPort, &QSerialPort::requestToSendChanged);
+    QVERIFY(rtsSpy.isValid());
+
+    QVERIFY(serialPort.open(QIODevice::ReadWrite));
+
+    // no flow control
+    QVERIFY(serialPort.setFlowControl(QSerialPort::NoFlowControl));
+    const bool toggle1 = !serialPort.isRequestToSend();
+    QVERIFY(serialPort.setRequestToSend(toggle1));
+    QCOMPARE(serialPort.isRequestToSend(), toggle1);
+
+    // software flow control
+    QVERIFY(serialPort.setFlowControl(QSerialPort::SoftwareControl));
+    const bool toggle2 = !serialPort.isRequestToSend();
+    QVERIFY(serialPort.setRequestToSend(toggle2));
+    QCOMPARE(serialPort.isRequestToSend(), toggle2);
+
+    // hardware flow control
+    QVERIFY(serialPort.setFlowControl(QSerialPort::HardwareControl));
+    const bool toggle3 = !serialPort.isRequestToSend();
+    QVERIFY(!serialPort.setRequestToSend(toggle3)); // not allowed
+    QCOMPARE(serialPort.isRequestToSend(), !toggle3); // same as before
+    QCOMPARE(serialPort.error(), QSerialPort::UnsupportedOperationError);
+
+    QCOMPARE(errorSpy.count(), 2);
+    QCOMPARE(qvariant_cast<QSerialPort::SerialPortError>(errorSpy.at(0).at(0)), QSerialPort::NoError);
+    QCOMPARE(qvariant_cast<QSerialPort::SerialPortError>(errorSpy.at(1).at(0)), QSerialPort::UnsupportedOperationError);
+
+    QCOMPARE(rtsSpy.count(), 2);
+    QCOMPARE(qvariant_cast<bool>(rtsSpy.at(0).at(0)), toggle1);
+    QCOMPARE(qvariant_cast<bool>(rtsSpy.at(1).at(0)), toggle2);
+}
+
+void tst_QSerialPort::dtr()
+{
+    QSerialPort serialPort(m_senderPortName);
+
+    QSignalSpy errorSpy(&serialPort, static_cast<void (QSerialPort::*)(QSerialPort::SerialPortError)>(&QSerialPort::error));
+    QVERIFY(errorSpy.isValid());
+    QSignalSpy dtrSpy(&serialPort, &QSerialPort::dataTerminalReadyChanged);
+    QVERIFY(dtrSpy.isValid());
+
+    QVERIFY(serialPort.open(QIODevice::ReadWrite));
+
+    // no flow control
+    QVERIFY(serialPort.setFlowControl(QSerialPort::NoFlowControl));
+    const bool toggle1 = !serialPort.isDataTerminalReady();
+    QVERIFY(serialPort.setDataTerminalReady(toggle1));
+    QCOMPARE(serialPort.isDataTerminalReady(), toggle1);
+
+    // software flow control
+    QVERIFY(serialPort.setFlowControl(QSerialPort::SoftwareControl));
+    const bool toggle2 = !serialPort.isDataTerminalReady();
+    QVERIFY(serialPort.setDataTerminalReady(toggle2));
+    QCOMPARE(serialPort.isDataTerminalReady(), toggle2);
+
+    // hardware flow control
+    QVERIFY(serialPort.setFlowControl(QSerialPort::HardwareControl));
+    const bool toggle3 = !serialPort.isDataTerminalReady();
+    QVERIFY(serialPort.setDataTerminalReady(toggle3));
+    QCOMPARE(serialPort.isDataTerminalReady(), toggle3);
+
+    QCOMPARE(errorSpy.count(), 1);
+    QCOMPARE(qvariant_cast<QSerialPort::SerialPortError>(errorSpy.at(0).at(0)), QSerialPort::NoError);
+
+    QCOMPARE(dtrSpy.count(), 3);
+    QCOMPARE(qvariant_cast<bool>(dtrSpy.at(0).at(0)), toggle1);
+    QCOMPARE(qvariant_cast<bool>(dtrSpy.at(1).at(0)), toggle2);
+    QCOMPARE(qvariant_cast<bool>(dtrSpy.at(2).at(0)), toggle3);
+}
+
+void tst_QSerialPort::independenceRtsAndDtr()
+{
+    QSerialPort serialPort(m_senderPortName);
+    QVERIFY(serialPort.open(QIODevice::ReadWrite)); // No flow control by default!
+
+    QVERIFY(serialPort.setDataTerminalReady(true));
+    QVERIFY(serialPort.setRequestToSend(true));
+    QVERIFY(serialPort.isDataTerminalReady());
+    QVERIFY(serialPort.isRequestToSend());
+
+    // check that DTR changing does not change RTS
+    QVERIFY(serialPort.setDataTerminalReady(false));
+    QVERIFY(!serialPort.isDataTerminalReady());
+    QVERIFY(serialPort.isRequestToSend());
+    QVERIFY(serialPort.setDataTerminalReady(true));
+    QVERIFY(serialPort.isDataTerminalReady());
+    QVERIFY(serialPort.isRequestToSend());
+
+    // check that RTS changing does not change DTR
+    QVERIFY(serialPort.setRequestToSend(false));
+    QVERIFY(!serialPort.isRequestToSend());
+    QVERIFY(serialPort.isDataTerminalReady());
+    QVERIFY(serialPort.setRequestToSend(true));
+    QVERIFY(serialPort.isRequestToSend());
+    QVERIFY(serialPort.isDataTerminalReady());
+
+    // check that baud rate changing does not change DTR or RTS
+    QVERIFY(serialPort.setBaudRate(115200));
+    QVERIFY(serialPort.isRequestToSend());
+    QVERIFY(serialPort.isDataTerminalReady());
+
+    // check that data bits changing does not change DTR or RTS
+    QVERIFY(serialPort.setDataBits(QSerialPort::Data7));
+    QVERIFY(serialPort.isRequestToSend());
+    QVERIFY(serialPort.isDataTerminalReady());
+
+    // check that parity changing does not change DTR or RTS
+    QVERIFY(serialPort.setParity(QSerialPort::EvenParity));
+    QVERIFY(serialPort.isRequestToSend());
+    QVERIFY(serialPort.isDataTerminalReady());
+
+    // check that stop bits changing does not change DTR or RTS
+    QVERIFY(serialPort.setStopBits(QSerialPort::TwoStop));
+    QVERIFY(serialPort.isRequestToSend());
+    QVERIFY(serialPort.isDataTerminalReady());
+
+    // check that software flow control changing does not change DTR or RTS
+    QVERIFY(serialPort.setFlowControl(QSerialPort::SoftwareControl));
+    QVERIFY(serialPort.isRequestToSend());
+    QVERIFY(serialPort.isDataTerminalReady());
 }
 
 void tst_QSerialPort::handleBytesWrittenAndExitLoopSlot(qint64 bytesWritten)
@@ -995,7 +1129,7 @@ private:
 void tst_QSerialPort::synchronousReadWriteAfterAsynchronousReadWrite()
 {
     MasterTransactor master(m_senderPortName);
-    SlaveTransactor *slave = new SlaveTransactor(m_receiverPortName);
+    auto slave = new SlaveTransactor(m_receiverPortName);
 
     QThread thread;
     slave->moveToThread(&thread);

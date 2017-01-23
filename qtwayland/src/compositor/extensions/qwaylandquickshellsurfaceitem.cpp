@@ -38,6 +38,7 @@
 #include "qwaylandquickshellsurfaceitem_p.h"
 
 #include <QtWaylandCompositor/QWaylandShellSurface>
+#include <QGuiApplication>
 
 QT_BEGIN_NAMESPACE
 
@@ -45,19 +46,21 @@ QT_BEGIN_NAMESPACE
  * \qmltype ShellSurfaceItem
  * \inqmlmodule QtWayland.Compositor
  * \preliminary
- * \brief An item representing a WlShellSurface.
+ * \brief A Qt Quick item type representing a WlShellSurface.
  *
- * This type is used to render wl_shell or xdg_shell surfaces as part of a Qt Quick
+ * This type is used to render \c wl_shell or \c xdg_shell surfaces as part of a Qt Quick
  * scene. It handles moving and resizing triggered by clicking on the window decorations.
+ *
+ * \sa WaylandQuickItem
  */
 
 /*!
  * \class QWaylandQuickShellSurfaceItem
  * \inmodule QtWaylandCompositor
  * \preliminary
- * \brief A Qt Quick item for QWaylandShellSurface.
+ * \brief The QWaylandQuickShellSurfaceItem class provides a Qt Quick item that represents a QWaylandShellSurface.
  *
- * This class is used to render wl_shell or xdg_shell surfaces as part of a Qt Quick
+ * This class is used to render \c wl_shell or \c xdg_shell surfaces as part of a Qt Quick
  * scene. It handles moving and resizing triggered by clicking on the window decorations.
  *
  * \sa QWaylandQuickItem
@@ -146,6 +149,113 @@ void QWaylandQuickShellSurfaceItem::mouseReleaseEvent(QMouseEvent *event)
     Q_D(QWaylandQuickShellSurfaceItem);
     if (!d->m_shellIntegration->mouseReleaseEvent(event))
         QWaylandQuickItem::mouseReleaseEvent(event);
+}
+
+/*!
+\class QWaylandQuickShellEventFilter
+\brief QWaylandQuickShellEventFilter implements a Wayland popup grab
+\internal
+*/
+
+void QWaylandQuickShellEventFilter::startFilter(QWaylandClient *client, CallbackFunction closePopups)
+{
+    if (!self)
+        self = new QWaylandQuickShellEventFilter(qGuiApp);
+    if (!self->eventFilterInstalled) {
+        qGuiApp->installEventFilter(self);
+        self->eventFilterInstalled = true;
+        self->client = client;
+        self->closePopups = closePopups;
+    }
+}
+
+void QWaylandQuickShellEventFilter::cancelFilter()
+{
+    if (!self)
+        return;
+    if (self->eventFilterInstalled && !self->waitForRelease)
+        self->stopFilter();
+}
+
+void QWaylandQuickShellEventFilter::stopFilter()
+{
+    if (eventFilterInstalled) {
+        qGuiApp->removeEventFilter(this);
+        eventFilterInstalled = false;
+    }
+}
+QWaylandQuickShellEventFilter *QWaylandQuickShellEventFilter::self = nullptr;
+
+QWaylandQuickShellEventFilter::QWaylandQuickShellEventFilter(QObject *parent)
+    : QObject(parent), eventFilterInstalled(false), waitForRelease(false), closePopups(nullptr)
+{
+}
+
+bool QWaylandQuickShellEventFilter::eventFilter(QObject *receiver, QEvent *e)
+{
+    if (e->type() == QEvent::MouseButtonPress || e->type() == QEvent::MouseButtonRelease) {
+        bool press = e->type() == QEvent::MouseButtonPress;
+        if (press && !waitForRelease) {
+            // The user clicked something: we need to close popups unless this press is caught later
+            if (!mousePressTimeout.isActive())
+                mousePressTimeout.start(0, this);
+        }
+
+        QQuickItem *item = qobject_cast<QQuickItem*>(receiver);
+        if (!item)
+            return false;
+
+        QMouseEvent *event = static_cast<QMouseEvent*>(e);
+        QWaylandQuickShellSurfaceItem *shellSurfaceItem = qobject_cast<QWaylandQuickShellSurfaceItem*>(item);
+        bool finalRelease = (event->type() == QEvent::MouseButtonRelease) && (event->buttons() == Qt::NoButton);
+        bool popupClient = shellSurfaceItem && shellSurfaceItem->surface()->client() == client;
+
+        if (waitForRelease) {
+            // We are eating events until all mouse buttons are released
+            if (finalRelease) {
+                waitForRelease = false;
+                stopFilter();
+            }
+            return true;
+        }
+
+        if (finalRelease && mousePressTimeout.isActive()) {
+            // the user somehow managed to press and release the mouse button in 0 milliseconds
+            qWarning("Badly written autotest detected");
+            mousePressTimeout.stop();
+            stopFilter();
+        }
+
+        if (press && !shellSurfaceItem && !QQmlProperty(item, QStringLiteral("qtwayland_blocking_overlay")).isValid()) {
+            // the user clicked on something that's not blocking mouse events
+            e->ignore(); //propagate the event to items below
+            return true; // don't give the event to the item
+        }
+
+        mousePressTimeout.stop(); // we've got this
+
+        if (press && !popupClient) {
+            // The user clicked outside the active popup's client. The popups should
+            // be closed, but the event filter will stay to catch the release-
+            // event before removing itself.
+            waitForRelease = true;
+            closePopups();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void QWaylandQuickShellEventFilter::timerEvent(QTimerEvent *event)
+{
+    if (event->timerId() == mousePressTimeout.timerId()) {
+        mousePressTimeout.stop();
+        closePopups();
+        stopFilter();
+        // Don't wait for release: Since the press wasn't accepted,
+        // the release won't be delivered.
+    }
 }
 
 QT_END_NAMESPACE

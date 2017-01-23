@@ -41,9 +41,9 @@ import QtQuick.Controls.Universal 2.0
 T.TextField {
     id: control
 
-    implicitWidth: Math.max(contentWidth + leftPadding + rightPadding,
-                            background ? background.implicitWidth : 0,
-                            placeholder.implicitWidth + leftPadding + rightPadding)
+    implicitWidth: Math.max(background ? background.implicitWidth : 0,
+                            placeholderText ? placeholder.implicitWidth + leftPadding + rightPadding : 0)
+                            || contentWidth + leftPadding + rightPadding
     implicitHeight: Math.max(contentHeight + topPadding + bottomPadding,
                              background ? background.implicitHeight : 0,
                              placeholder.implicitHeight + topPadding + bottomPadding)
@@ -56,8 +56,7 @@ T.TextField {
 
     Universal.theme: activeFocus ? Universal.Light : undefined
 
-    color: !enabled ? Universal.chromeDisabledLowColor :
-            activeFocus ? Universal.chromeBlackHighColor : Universal.foreground
+    color: !enabled ? Universal.chromeDisabledLowColor : Universal.foreground
     selectionColor: Universal.accent
     selectedTextColor: Universal.chromeWhiteColor
     verticalAlignment: TextInput.AlignVCenter
@@ -79,7 +78,6 @@ T.TextField {
         elide: Text.ElideRight
     }
 
-    //! [background]
     background: Rectangle {
         implicitWidth: 60 // TextControlThemeMinWidth - 4 (border)
         implicitHeight: 28 // TextControlThemeMinHeight - 4 (border)
@@ -89,5 +87,4 @@ T.TextField {
                        control.activeFocus ? control.Universal.accent : control.Universal.chromeDisabledLowColor
         color: control.enabled ? control.Universal.background : control.Universal.baseLowColor
     }
-    //! [background]
 }

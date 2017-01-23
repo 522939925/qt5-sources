@@ -970,7 +970,6 @@ void CppCodeParser::processOtherMetaCommand(const Doc& doc,
         else if (node->isQmlType() || node->isJsType()) {
             QmlTypeNode* qmlType = static_cast<QmlTypeNode*>(node);
             qmlType->setQmlBaseName(arg);
-            QmlTypeNode::addInheritedBy(arg,node);
         }
     }
     else if (command == COMMAND_QMLINSTANTIATES) {
@@ -1034,8 +1033,9 @@ void CppCodeParser::processOtherMetaCommand(const Doc& doc,
  */
 void CppCodeParser::processOtherMetaCommands(const Doc& doc, Node *node)
 {
-    const QSet<QString> metaCommands = doc.metaCommandsUsed();
-    QSet<QString>::ConstIterator cmd = metaCommands.constBegin();
+    QStringList metaCommands = doc.metaCommandsUsed().toList();
+    metaCommands.sort();
+    QStringList::ConstIterator cmd = metaCommands.constBegin();
     while (cmd != metaCommands.constEnd()) {
         ArgList args = doc.metaCommandArgs(*cmd);
         ArgList::ConstIterator arg = args.constBegin();

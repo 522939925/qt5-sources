@@ -56,8 +56,7 @@ T.TextArea {
 
     Universal.theme: activeFocus ? Universal.Light : undefined
 
-    color: !enabled ? Universal.chromeDisabledLowColor :
-            activeFocus ? Universal.chromeBlackHighColor : Universal.foreground
+    color: !enabled ? Universal.chromeDisabledLowColor : Universal.foreground
     selectionColor: Universal.accent
     selectedTextColor: Universal.chromeWhiteColor
 
@@ -78,7 +77,6 @@ T.TextArea {
         elide: Text.ElideRight
     }
 
-    //! [background]
     background: Rectangle {
         implicitWidth: 60 // TextControlThemeMinWidth - 4 (border)
         implicitHeight: 28 // TextControlThemeMinHeight - 4 (border)
@@ -88,5 +86,4 @@ T.TextArea {
                        control.activeFocus ? control.Universal.accent : control.Universal.chromeDisabledLowColor
         color: control.enabled ? control.Universal.background : control.Universal.baseLowColor
     }
-    //! [background]
 }

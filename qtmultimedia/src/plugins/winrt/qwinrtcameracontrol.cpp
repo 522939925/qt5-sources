@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd and/or its subsidiary(-ies).
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd and/or its subsidiary(-ies).
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -942,7 +945,8 @@ HRESULT QWinRTCameraControl::initialize()
         Q_ASSERT_SUCCEEDED(hr);
         if (isFocusSupported) {
             hr = advancedVideoDeviceController->get_RegionsOfInterestControl(&d->regionsOfInterestControl);
-            Q_ASSERT_SUCCEEDED(hr);
+            if (FAILED(hr))
+                qCDebug(lcMMCamera) << "Focus supported, but no control for regions of interest available";
             hr = initializeFocus();
             Q_ASSERT_SUCCEEDED(hr);
         } else {
@@ -1124,46 +1128,54 @@ bool QWinRTCameraControl::setFocus(QCameraFocus::FocusModes modes)
     if (d->status == QCamera::UnloadedStatus)
         return false;
 
-    ComPtr<IFocusSettings> focusSettings;
-    ComPtr<IInspectable> focusSettingsObject;
-    HRESULT hr = RoActivateInstance(HString::MakeReference(RuntimeClass_Windows_Media_Devices_FocusSettings).Get(), &focusSettingsObject);
-    Q_ASSERT_SUCCEEDED(hr);
-    hr = focusSettingsObject.As(&focusSettings);
-    Q_ASSERT_SUCCEEDED(hr);
-    FocusMode mode;
-    if (modes.testFlag(QCameraFocus::ContinuousFocus)) {
-        mode = FocusMode_Continuous;
-    } else if (modes.testFlag(QCameraFocus::AutoFocus)
-               || modes.testFlag(QCameraFocus::MacroFocus)
-               || modes.testFlag(QCameraFocus::InfinityFocus)) {
-        // The Macro and infinity focus modes are only supported in auto focus mode on WinRT.
-        // QML camera focus doesn't support combined focus flags settings. In the case of macro
-        // and infinity Focus modes, the auto focus setting is applied.
-        mode = FocusMode_Single;
-    } else {
-        emit error(QCamera::NotSupportedFeatureError, QStringLiteral("Unsupported camera focus modes."));
-        return false;
-    }
-    hr = focusSettings->put_Mode(mode);
-    Q_ASSERT_SUCCEEDED(hr);
-    AutoFocusRange range = AutoFocusRange_Normal;
-    if (modes.testFlag(QCameraFocus::MacroFocus))
-        range = AutoFocusRange_Macro;
-    else if (modes.testFlag(QCameraFocus::InfinityFocus))
-        range = AutoFocusRange_FullRange;
-    hr = focusSettings->put_AutoFocusRange(range);
-    Q_ASSERT_SUCCEEDED(hr);
-    hr = focusSettings->put_WaitForFocus(true);
-    Q_ASSERT_SUCCEEDED(hr);
-    hr = focusSettings->put_DisableDriverFallback(false);
-    Q_ASSERT_SUCCEEDED(hr);
+    bool result = false;
+    HRESULT hr = QEventDispatcherWinRT::runOnXamlThread([modes, &result, d, this]() {
+        ComPtr<IFocusSettings> focusSettings;
+        ComPtr<IInspectable> focusSettingsObject;
+        HRESULT hr = RoActivateInstance(HString::MakeReference(RuntimeClass_Windows_Media_Devices_FocusSettings).Get(), &focusSettingsObject);
+        Q_ASSERT_SUCCEEDED(hr);
+        hr = focusSettingsObject.As(&focusSettings);
+        Q_ASSERT_SUCCEEDED(hr);
+        FocusMode mode;
+        if (modes.testFlag(QCameraFocus::ContinuousFocus)) {
+            mode = FocusMode_Continuous;
+        } else if (modes.testFlag(QCameraFocus::AutoFocus)
+                   || modes.testFlag(QCameraFocus::MacroFocus)
+                   || modes.testFlag(QCameraFocus::InfinityFocus)) {
+            // The Macro and infinity focus modes are only supported in auto focus mode on WinRT.
+            // QML camera focus doesn't support combined focus flags settings. In the case of macro
+            // and infinity Focus modes, the auto focus setting is applied.
+            mode = FocusMode_Single;
+        } else {
+            emit error(QCamera::NotSupportedFeatureError, QStringLiteral("Unsupported camera focus modes."));
+            result = false;
+            return S_OK;
+        }
+        hr = focusSettings->put_Mode(mode);
+        Q_ASSERT_SUCCEEDED(hr);
+        AutoFocusRange range = AutoFocusRange_Normal;
+        if (modes.testFlag(QCameraFocus::MacroFocus))
+            range = AutoFocusRange_Macro;
+        else if (modes.testFlag(QCameraFocus::InfinityFocus))
+            range = AutoFocusRange_FullRange;
+        hr = focusSettings->put_AutoFocusRange(range);
+        Q_ASSERT_SUCCEEDED(hr);
+        hr = focusSettings->put_WaitForFocus(true);
+        Q_ASSERT_SUCCEEDED(hr);
+        hr = focusSettings->put_DisableDriverFallback(false);
+        Q_ASSERT_SUCCEEDED(hr);
 
-    ComPtr<IFocusControl2> focusControl2;
-    hr = d->focusControl.As(&focusControl2);
+        ComPtr<IFocusControl2> focusControl2;
+        hr = d->focusControl.As(&focusControl2);
+        Q_ASSERT_SUCCEEDED(hr);
+        hr = focusControl2->Configure(focusSettings.Get());
+        result = SUCCEEDED(hr);
+        RETURN_OK_IF_FAILED("Failed to configure camera focus control");
+        return S_OK;
+    });
     Q_ASSERT_SUCCEEDED(hr);
-    hr = focusControl2->Configure(focusSettings.Get());
-    RETURN_FALSE_IF_FAILED("Failed to configure camera focus control");
-    return true;
+    Q_UNUSED(hr); // Silence release build
+    return result;
 }
 
 bool QWinRTCameraControl::setFocusPoint(const QPointF &focusPoint)
@@ -1227,7 +1239,11 @@ bool QWinRTCameraControl::focus()
     if (!d->focusControl || status == AsyncStatus::Started)
         return false;
 
-    hr = d->focusControl->FocusAsync(&d->focusOperation);
+    QEventDispatcherWinRT::runOnXamlThread([&d, &hr]() {
+        hr = d->focusControl->FocusAsync(&d->focusOperation);
+        Q_ASSERT_SUCCEEDED(hr);
+        return S_OK;
+    });
     const long errorCode = HRESULT_CODE(hr);
     if (errorCode == ERROR_OPERATION_IN_PROGRESS
         || errorCode == ERROR_WRITE_PROTECT) {

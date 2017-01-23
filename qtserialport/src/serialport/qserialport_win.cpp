@@ -81,6 +81,98 @@
 
 QT_BEGIN_NAMESPACE
 
+static inline void qt_set_common_props(DCB *dcb)
+{
+    dcb->fBinary = TRUE;
+    dcb->fAbortOnError = FALSE;
+    dcb->fNull = FALSE;
+    dcb->fErrorChar = FALSE;
+
+    if (dcb->fDtrControl == DTR_CONTROL_HANDSHAKE)
+        dcb->fDtrControl = DTR_CONTROL_DISABLE;
+
+    if (dcb->fRtsControl != RTS_CONTROL_HANDSHAKE)
+        dcb->fRtsControl = RTS_CONTROL_DISABLE;
+}
+
+static inline void qt_set_baudrate(DCB *dcb, qint32 baudrate)
+{
+    dcb->BaudRate = baudrate;
+}
+
+static inline void qt_set_databits(DCB *dcb, QSerialPort::DataBits databits)
+{
+    dcb->ByteSize = databits;
+}
+
+static inline void qt_set_parity(DCB *dcb, QSerialPort::Parity parity)
+{
+    dcb->fParity = TRUE;
+    switch (parity) {
+    case QSerialPort::NoParity:
+        dcb->Parity = NOPARITY;
+        dcb->fParity = FALSE;
+        break;
+    case QSerialPort::OddParity:
+        dcb->Parity = ODDPARITY;
+        break;
+    case QSerialPort::EvenParity:
+        dcb->Parity = EVENPARITY;
+        break;
+    case QSerialPort::MarkParity:
+        dcb->Parity = MARKPARITY;
+        break;
+    case QSerialPort::SpaceParity:
+        dcb->Parity = SPACEPARITY;
+        break;
+    default:
+        dcb->Parity = NOPARITY;
+        dcb->fParity = FALSE;
+        break;
+    }
+}
+
+static inline void qt_set_stopbits(DCB *dcb, QSerialPort::StopBits stopbits)
+{
+    switch (stopbits) {
+    case QSerialPort::OneStop:
+        dcb->StopBits = ONESTOPBIT;
+        break;
+    case QSerialPort::OneAndHalfStop:
+        dcb->StopBits = ONE5STOPBITS;
+        break;
+    case QSerialPort::TwoStop:
+        dcb->StopBits = TWOSTOPBITS;
+        break;
+    default:
+        dcb->StopBits = ONESTOPBIT;
+        break;
+    }
+}
+
+static inline void qt_set_flowcontrol(DCB *dcb, QSerialPort::FlowControl flowcontrol)
+{
+    dcb->fInX = FALSE;
+    dcb->fOutX = FALSE;
+    dcb->fOutxCtsFlow = FALSE;
+    if (dcb->fRtsControl == RTS_CONTROL_HANDSHAKE)
+        dcb->fRtsControl = RTS_CONTROL_DISABLE;
+    switch (flowcontrol) {
+    case QSerialPort::NoFlowControl:
+        break;
+    case QSerialPort::SoftwareControl:
+        dcb->fInX = TRUE;
+        dcb->fOutX = TRUE;
+        break;
+    case QSerialPort::HardwareControl:
+        dcb->fOutxCtsFlow = TRUE;
+        dcb->fRtsControl = RTS_CONTROL_HANDSHAKE;
+        break;
+    default:
+        break;
+    }
+}
+
 bool QSerialPortPrivate::open(QIODevice::OpenMode mode)
 {
     DWORD desiredAccess = 0;
@@ -94,7 +186,7 @@ bool QSerialPortPrivate::open(QIODevice::OpenMode mode)
         desiredAccess |= GENERIC_WRITE;
 
     handle = ::CreateFile(reinterpret_cast<const wchar_t*>(systemLocation.utf16()),
-                              desiredAccess, 0, Q_NULLPTR, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, Q_NULLPTR);
+                              desiredAccess, 0, nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
 
     if (handle == INVALID_HANDLE_VALUE) {
         setError(getSystemError());
@@ -113,16 +205,15 @@ void QSerialPortPrivate::close()
     ::CancelIo(handle);
 
     delete notifier;
-    notifier = Q_NULLPTR;
+    notifier = nullptr;
 
     delete startAsyncWriteTimer;
-    startAsyncWriteTimer = Q_NULLPTR;
+    startAsyncWriteTimer = nullptr;
 
     communicationStarted = false;
     readStarted = false;
     writeStarted = false;
     writeBuffer.clear();
-    actualBytesToWrite = 0;
 
     if (settingsRestoredOnClose) {
         ::SetCommState(handle, &restoredDcb);
@@ -154,9 +245,9 @@ QSerialPort::PinoutSignals QSerialPortPrivate::pinoutSignals()
         ret |= QSerialPort::DataCarrierDetectSignal;
 
     DWORD bytesReturned = 0;
-    if (!::DeviceIoControl(handle, IOCTL_SERIAL_GET_DTRRTS, Q_NULLPTR, 0,
+    if (!::DeviceIoControl(handle, IOCTL_SERIAL_GET_DTRRTS, nullptr, 0,
                           &modemStat, sizeof(modemStat),
-                          &bytesReturned, Q_NULLPTR)) {
+                          &bytesReturned, nullptr)) {
         setError(getSystemError());
         return ret;
     }
@@ -191,7 +282,12 @@ bool QSerialPortPrivate::setRequestToSend(bool set)
         return false;
     }
 
-    return true;
+    DCB dcb;
+    if (!getDcb(&dcb))
+        return false;
+
+    dcb.fRtsControl = set ? RTS_CONTROL_ENABLE : RTS_CONTROL_DISABLE;
+    return setDcb(&dcb);
 }
 
 bool QSerialPortPrivate::flush()
@@ -204,10 +300,8 @@ bool QSerialPortPrivate::clear(QSerialPort::Directions directions)
     DWORD flags = 0;
     if (directions & QSerialPort::Input)
         flags |= PURGE_RXABORT | PURGE_RXCLEAR;
-    if (directions & QSerialPort::Output) {
+    if (directions & QSerialPort::Output)
         flags |= PURGE_TXABORT | PURGE_TXCLEAR;
-        actualBytesToWrite = 0;
-    }
     if (!::PurgeComm(handle, flags)) {
         setError(getSystemError());
         return false;
@@ -257,7 +351,7 @@ bool QSerialPortPrivate::waitForReadyRead(int msecs)
     stopWatch.start();
 
     do {
-        OVERLAPPED *overlapped = waitForNotified(
+        const OVERLAPPED *overlapped = waitForNotified(
                     qt_subtract_from_timeout(msecs, stopWatch.elapsed()));
         if (!overlapped)
             return false;
@@ -281,7 +375,7 @@ bool QSerialPortPrivate::waitForReadyRead(int msecs)
 
 bool QSerialPortPrivate::waitForBytesWritten(int msecs)
 {
-    if (writeBuffer.isEmpty())
+    if (writeBuffer.isEmpty() && writeChunkBuffer.isEmpty())
         return false;
 
     if (!writeStarted && !_q_startAsyncWrite())
@@ -291,7 +385,7 @@ bool QSerialPortPrivate::waitForBytesWritten(int msecs)
     stopWatch.start();
 
     for (;;) {
-        OVERLAPPED *overlapped = waitForNotified(
+        const OVERLAPPED *overlapped = waitForNotified(
                     qt_subtract_from_timeout(msecs, stopWatch.elapsed()));
         if (!overlapped)
             return false;
@@ -319,7 +413,8 @@ bool QSerialPortPrivate::setBaudRate(qint32 baudRate, QSerialPort::Directions di
     if (!getDcb(&dcb))
         return false;
 
-    dcb.BaudRate = baudRate;
+    qt_set_baudrate(&dcb, baudRate);
+
     return setDcb(&dcb);
 }
 
@@ -329,7 +424,8 @@ bool QSerialPortPrivate::setDataBits(QSerialPort::DataBits dataBits)
     if (!getDcb(&dcb))
         return false;
 
-    dcb.ByteSize = dataBits;
+    qt_set_databits(&dcb, dataBits);
+
     return setDcb(&dcb);
 }
 
@@ -339,29 +435,8 @@ bool QSerialPortPrivate::setParity(QSerialPort::Parity parity)
     if (!getDcb(&dcb))
         return false;
 
-    dcb.fParity = TRUE;
-    switch (parity) {
-    case QSerialPort::NoParity:
-        dcb.Parity = NOPARITY;
-        dcb.fParity = FALSE;
-        break;
-    case QSerialPort::OddParity:
-        dcb.Parity = ODDPARITY;
-        break;
-    case QSerialPort::EvenParity:
-        dcb.Parity = EVENPARITY;
-        break;
-    case QSerialPort::MarkParity:
-        dcb.Parity = MARKPARITY;
-        break;
-    case QSerialPort::SpaceParity:
-        dcb.Parity = SPACEPARITY;
-        break;
-    default:
-        dcb.Parity = NOPARITY;
-        dcb.fParity = FALSE;
-        break;
-    }
+    qt_set_parity(&dcb, parity);
+
     return setDcb(&dcb);
 }
 
@@ -371,20 +446,8 @@ bool QSerialPortPrivate::setStopBits(QSerialPort::StopBits stopBits)
     if (!getDcb(&dcb))
         return false;
 
-    switch (stopBits) {
-    case QSerialPort::OneStop:
-        dcb.StopBits = ONESTOPBIT;
-        break;
-    case QSerialPort::OneAndHalfStop:
-        dcb.StopBits = ONE5STOPBITS;
-        break;
-    case QSerialPort::TwoStop:
-        dcb.StopBits = TWOSTOPBITS;
-        break;
-    default:
-        dcb.StopBits = ONESTOPBIT;
-        break;
-    }
+    qt_set_stopbits(&dcb, stopBits);
+
     return setDcb(&dcb);
 }
 
@@ -394,24 +457,8 @@ bool QSerialPortPrivate::setFlowControl(QSerialPort::FlowControl flowControl)
     if (!getDcb(&dcb))
         return false;
 
-    dcb.fInX = FALSE;
-    dcb.fOutX = FALSE;
-    dcb.fOutxCtsFlow = FALSE;
-    dcb.fRtsControl = RTS_CONTROL_DISABLE;
-    switch (flowControl) {
-    case QSerialPort::NoFlowControl:
-        break;
-    case QSerialPort::SoftwareControl:
-        dcb.fInX = TRUE;
-        dcb.fOutX = TRUE;
-        break;
-    case QSerialPort::HardwareControl:
-        dcb.fOutxCtsFlow = TRUE;
-        dcb.fRtsControl = RTS_CONTROL_HANDSHAKE;
-        break;
-    default:
-        break;
-    }
+    qt_set_flowcontrol(&dcb, flowControl);
+
     return setDcb(&dcb);
 }
 
@@ -431,10 +478,8 @@ bool QSerialPortPrivate::completeAsyncRead(qint64 bytesTransferred)
         readStarted = false;
         return false;
     }
-    if (bytesTransferred > 0) {
-        char *ptr = buffer.reserve(bytesTransferred);
-        ::memcpy(ptr, readChunkBuffer.constData(), bytesTransferred);
-    }
+    if (bytesTransferred > 0)
+        buffer.append(readChunkBuffer.constData(), bytesTransferred);
 
     readStarted = false;
 
@@ -459,12 +504,13 @@ bool QSerialPortPrivate::completeAsyncWrite(qint64 bytesTransferred)
 
     if (writeStarted) {
         if (bytesTransferred == qint64(-1)) {
+            writeChunkBuffer.clear();
             writeStarted = false;
             return false;
-        } else if (bytesTransferred > 0) {
-            writeBuffer.free(bytesTransferred);
-            emit q->bytesWritten(bytesTransferred);
         }
+        Q_ASSERT(bytesTransferred == writeChunkBuffer.size());
+        writeChunkBuffer.clear();
+        emit q->bytesWritten(bytesTransferred);
         writeStarted = false;
     }
 
@@ -507,7 +553,7 @@ bool QSerialPortPrivate::startAsyncRead()
     }
 
     ::ZeroMemory(&readCompletionOverlapped, sizeof(readCompletionOverlapped));
-    if (::ReadFile(handle, readChunkBuffer.data(), bytesToRead, Q_NULLPTR, &readCompletionOverlapped)) {
+    if (::ReadFile(handle, readChunkBuffer.data(), bytesToRead, nullptr, &readCompletionOverlapped)) {
         readStarted = true;
         return true;
     }
@@ -531,10 +577,10 @@ bool QSerialPortPrivate::_q_startAsyncWrite()
     if (writeBuffer.isEmpty() || writeStarted)
         return true;
 
-    const int writeBytes = writeBuffer.nextDataBlockSize();
+    writeChunkBuffer = writeBuffer.read();
     ::ZeroMemory(&writeCompletionOverlapped, sizeof(writeCompletionOverlapped));
-    if (!::WriteFile(handle, writeBuffer.readPointer(),
-                     writeBytes, Q_NULLPTR, &writeCompletionOverlapped)) {
+    if (!::WriteFile(handle, writeChunkBuffer.constData(),
+                     writeChunkBuffer.size(), nullptr, &writeCompletionOverlapped)) {
 
         QSerialPortErrorInfo error = getSystemError();
         if (error.errorCode != QSerialPort::NoError) {
@@ -545,7 +591,6 @@ bool QSerialPortPrivate::_q_startAsyncWrite()
         }
     }
 
-    actualBytesToWrite -= writeBytes;
     writeStarted = true;
     return true;
 }
@@ -579,8 +624,7 @@ qint64 QSerialPortPrivate::writeData(const char *data, qint64 maxSize)
 {
     Q_Q(QSerialPort);
 
-    ::memcpy(writeBuffer.reserve(maxSize), data, maxSize);
-    actualBytesToWrite += maxSize;
+    writeBuffer.append(data, maxSize);
 
     if (!writeBuffer.isEmpty() && !writeStarted) {
         if (!startAsyncWriteTimer) {
@@ -588,7 +632,8 @@ qint64 QSerialPortPrivate::writeData(const char *data, qint64 maxSize)
             QObjectPrivate::connect(startAsyncWriteTimer, &QTimer::timeout, this, &QSerialPortPrivate::_q_startAsyncWrite);
             startAsyncWriteTimer->setSingleShot(true);
         }
-        startAsyncWriteTimer->start(0);
+        if (!startAsyncWriteTimer->isActive())
+            startAsyncWriteTimer->start();
     }
     return maxSize;
 }
@@ -598,7 +643,7 @@ OVERLAPPED *QSerialPortPrivate::waitForNotified(int msecs)
     OVERLAPPED *overlapped = notifier->waitForAnyNotified(msecs);
     if (!overlapped) {
         setError(getSystemError(WAIT_TIMEOUT));
-        return 0;
+        return nullptr;
     }
     return overlapped;
 }
@@ -606,7 +651,7 @@ OVERLAPPED *QSerialPortPrivate::waitForNotified(int msecs)
 qint64 QSerialPortPrivate::queuedBytesCount(QSerialPort::Direction direction) const
 {
     COMSTAT comstat;
-    if (::ClearCommError(handle, Q_NULLPTR, &comstat) == 0)
+    if (::ClearCommError(handle, nullptr, &comstat) == 0)
         return -1;
     return (direction == QSerialPort::Input)
             ? comstat.cbInQue
@@ -623,17 +668,12 @@ inline bool QSerialPortPrivate::initialize()
 
     restoredDcb = dcb;
 
-    dcb.fBinary = TRUE;
-    dcb.fInX = FALSE;
-    dcb.fOutX = FALSE;
-    dcb.fAbortOnError = FALSE;
-    dcb.fNull = FALSE;
-    dcb.fErrorChar = FALSE;
-
-    if (dcb.fDtrControl == DTR_CONTROL_HANDSHAKE)
-        dcb.fDtrControl = DTR_CONTROL_DISABLE;
-
-    dcb.BaudRate = inputBaudRate;
+    qt_set_common_props(&dcb);
+    qt_set_baudrate(&dcb, inputBaudRate);
+    qt_set_databits(&dcb, dataBits);
+    qt_set_parity(&dcb, parity);
+    qt_set_stopbits(&dcb, stopBits);
+    qt_set_flowcontrol(&dcb, flowControl);
 
     if (!setDcb(&dcb))
         return false;

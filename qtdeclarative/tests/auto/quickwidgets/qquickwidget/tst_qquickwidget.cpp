@@ -55,6 +55,7 @@ private slots:
     void readback();
     void renderingSignals();
     void grabBeforeShow();
+    void nullEngine();
 };
 
 
@@ -299,6 +300,18 @@ void tst_qquickwidget::grabBeforeShow()
 {
     QQuickWidget widget;
     QVERIFY(!widget.grab().isNull());
+}
+
+void tst_qquickwidget::nullEngine()
+{
+    QQuickWidget widget;
+    // Default should have no errors, even with a null qml engine
+    QVERIFY(widget.errors().isEmpty());
+    QCOMPARE(widget.status(), QQuickWidget::Null);
+
+    // A QML engine should be created lazily.
+    QVERIFY(widget.rootContext());
+    QVERIFY(widget.engine());
 }
 
 QTEST_MAIN(tst_qquickwidget)

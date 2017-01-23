@@ -227,8 +227,9 @@ class NinjaWriter(object):
     self.flavor = flavor
     self.abs_build_dir = None
     if toplevel_dir is not None:
-      self.abs_build_dir = os.path.abspath(os.path.join(toplevel_dir,
-                                                        build_dir))
+      self.abs_build_dir = os.path.abspath(os.path.join(toplevel_dir, build_dir))
+      self.abs_base_dir = os.path.abspath(os.path.join(toplevel_dir, base_dir))
+
     self.obj_ext = '.obj' if flavor == 'win' else '.o'
     if flavor == 'win':
       # See docstring of msvs_emulation.GenerateEnvironmentFiles().
@@ -339,13 +340,19 @@ class NinjaWriter(object):
       obj += '.' + self.toolset
 
     path_dir, path_basename = os.path.split(path)
+    if os.path.isabs(path_dir):
+        path_dir = gyp.common.RelativePath(path_dir, self.abs_base_dir)
     #assert not os.path.isabs(path_dir), (
         #"'%s' can not be absolute path (see crbug.com/462153)." % path_dir)
 
     if qualified:
       path_basename = self.name + '.' + path_basename
-    return os.path.normpath(os.path.join(obj, self.base_dir, path_dir,
-                                         path_basename))
+
+    out_dir = os.path.normpath(os.path.join(self.base_dir, path_dir, path_basename))
+    if os.path.commonprefix([out_dir, os.path.pardir]) == os.path.pardir:
+      out_dir = out_dir.replace('..', '.')
+
+    return os.path.normpath(os.path.join(obj, out_dir))
 
   def WriteCollapsedDependencies(self, name, targets, order_only=None):
     """Given a list of targets, return a path for a single file
@@ -913,7 +920,11 @@ class NinjaWriter(object):
         obj = 'obj'
         if self.toolset != 'target':
           obj += '.' + self.toolset
-        pdbpath = os.path.normpath(os.path.join(obj, self.base_dir, self.name))
+        output_file_path = self.base_dir
+        if os.path.commonprefix([output_file_path, os.path.pardir]) == os.path.pardir:
+            output_file_path = output_file_path.replace('..', '.')
+
+        pdbpath = os.path.normpath(os.path.join(obj, output_file_path, self.name))
         pdbpath_c = pdbpath + '.c.pdb'
         pdbpath_cc = pdbpath + '.cc.pdb'
       self.WriteVariableList(ninja_file, 'pdbname_c', [pdbpath_c])
@@ -1282,13 +1293,8 @@ class NinjaWriter(object):
       if self.flavor == 'win':
         # qmake will take care of the manifest
         ldflags = filter(lambda x: not x.lower().startswith('/manifest'), ldflags)
-        # adjust pdb file name
-        pdb_name = 'Qt5WebEngineCore.pdb'
-        if self.config_name.lower().startswith('debug'):
-            pdb_name = 'Qt5WebEngineCored.pdb'
-        if '/PDB:QtWebEngineCore.dll.pdb' in ldflags:
-            pdb_index = ldflags.index('/PDB:QtWebEngineCore.dll.pdb')
-            ldflags[pdb_index] = '/PDB:$$shell_quote($$shell_path($$[QT_HOST_LIBS/get]/)' + pdb_name + ')'
+        # Remove the /PDB argument. The default suits us.
+        ldflags = filter(lambda x: not x.startswith('/PDB:'), ldflags)
 
       # Replace "$!PRODUCT_DIR" with "$$PWD" in link flags (which might contain some -L directives).
       prefixed_lflags = [self.ExpandSpecial(f, '$$PWD') for f in ldflags]
@@ -2376,10 +2382,16 @@ def GenerateOutputForConfig(target_list, target_dicts, data, params,
     hash_for_rules = hashlib.md5(qualified_target_for_hash).hexdigest()
 
     base_path = os.path.dirname(build_file)
+    output_file_path = base_path
+    if os.path.commonprefix([output_file_path, os.path.pardir]) == os.path.pardir:
+        # avoid escaping the build-dir due to generated files
+        # outside the source directory
+        output_file_path = output_file_path.replace('..', '.')
+
     obj = 'obj'
     if toolset != 'target':
       obj += '.' + toolset
-    output_file = os.path.join(obj, base_path, name + '.ninja')
+    output_file = os.path.join(obj, output_file_path, name + '.ninja')
 
     ninja_output = StringIO()
     writer = NinjaWriter(hash_for_rules, target_outputs, base_path, build_dir,

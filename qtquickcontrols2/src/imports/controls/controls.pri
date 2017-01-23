@@ -9,6 +9,7 @@ SOURCES += \
     $$PWD/qquickdialring.cpp
 
 QML_CONTROLS = \
+    AbstractButton.qml \
     ApplicationWindow.qml \
     BusyIndicator.qml \
     Button.qml \
@@ -16,6 +17,8 @@ QML_CONTROLS = \
     CheckDelegate.qml \
     CheckIndicator.qml \
     ComboBox.qml \
+    Container.qml \
+    Control.qml \
     Dial.qml \
     Drawer.qml \
     Frame.qml \

@@ -1,11 +1,8 @@
-[geolocationRequestJS]
-*
+[comboBoxPopupPositionAfterMove]
+linux
 
 [macCopyUnicodeToClipboard]
 osx
 
 [getUserMediaRequest]
-windows
-
-[setHtmlWithImageResource]
 *

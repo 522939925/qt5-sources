@@ -42,25 +42,19 @@ import QtQuick.Controls.Material.impl 2.0
 T.Drawer {
     id: control
 
+    parent: T.ApplicationWindow.overlay
+
     implicitWidth: Math.max(background ? background.implicitWidth : 0, contentWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(background ? background.implicitHeight : 0, contentHeight + topPadding + bottomPadding)
 
     contentWidth: contentItem.implicitWidth || (contentChildren.length === 1 ? contentChildren[0].implicitWidth : 0)
     contentHeight: contentItem.implicitHeight || (contentChildren.length === 1 ? contentChildren[0].implicitHeight : 0)
 
-    //! [enter]
     enter: Transition { SmoothedAnimation { velocity: 5 } }
-    //! [enter]
-
-    //! [exit]
     exit: Transition { SmoothedAnimation { velocity: 5 } }
-    //! [exit]
 
-    //! [contentItem]
     contentItem: Item { }
-    //! [contentItem]
 
-    //! [background]
     background: Rectangle {
         color: control.Material.dialogColor
 
@@ -70,5 +64,4 @@ T.Drawer {
             fullHeight: true
         }
     }
-    //! [background]
 }

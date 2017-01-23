@@ -406,11 +406,10 @@ The following functions are also on the Qt object.
         \li \c "ios" - iOS
         \li \c "tvos" - tvOS
         \li \c "linux" - Linux
-        \li \c "osx" - OS X
+        \li \c "osx" - \macos
         \li \c "unix" - Other Unix-based OS
         \li \c "windows" - Windows
-        \li \c "wince" - Windows CE
-        \li \c "winrt" - Windows RT
+        \li \c "winrt" - Windows Runtime
         \li \c "winphone" - Windows Phone
     \endlist
     \endtable
@@ -1801,14 +1800,15 @@ void QQmlData::setPendingBindingBit(QObject *obj, int coreIndex)
     QQmlData_setBit(this, obj, coreIndex * 2 + 1);
 }
 
-void QQmlData::ensurePropertyCache(QJSEngine *engine, QObject *object)
+QQmlPropertyCache *QQmlData::ensurePropertyCache(QJSEngine *engine, QObject *object)
 {
     Q_ASSERT(engine);
     QQmlData *ddata = QQmlData::get(object, /*create*/true);
-    if (ddata->propertyCache)
-        return;
-    ddata->propertyCache = QJSEnginePrivate::get(engine)->cache(object);
-    if (ddata->propertyCache) ddata->propertyCache->addref();
+    if (!ddata->propertyCache){
+        ddata->propertyCache = QJSEnginePrivate::get(engine)->cache(object);
+        if (ddata->propertyCache) ddata->propertyCache->addref();
+    }
+    return ddata->propertyCache;
 }
 
 void QQmlEnginePrivate::sendQuit()

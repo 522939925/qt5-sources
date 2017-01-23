@@ -74,6 +74,7 @@
 #include "ui/events/latency_info.h"
 
 #include <QDesktopServices>
+#include <QTimer>
 
 namespace QtWebEngineCore {
 
@@ -100,19 +101,26 @@ content::WebContents *WebContentsDelegateQt::OpenURLFromTab(content::WebContents
 {
     content::WebContents *target = source;
     if (params.disposition != CURRENT_TAB) {
-        WebContentsAdapter *targetAdapter = createWindow(0, params.disposition, gfx::Rect(), params.user_gesture);
+        QSharedPointer<WebContentsAdapter> targetAdapter = createWindow(0, params.disposition, gfx::Rect(), params.user_gesture);
         if (targetAdapter)
             target = targetAdapter->webContents();
     }
+    Q_ASSERT(target);
 
     content::NavigationController::LoadURLParams load_url_params(params.url);
+    load_url_params.source_site_instance = params.source_site_instance;
     load_url_params.referrer = params.referrer;
     load_url_params.frame_tree_node_id = params.frame_tree_node_id;
+    load_url_params.redirect_chain = params.redirect_chain;
     load_url_params.transition_type = params.transition;
     load_url_params.extra_headers = params.extra_headers;
     load_url_params.should_replace_current_entry = params.should_replace_current_entry;
     load_url_params.is_renderer_initiated = params.is_renderer_initiated;
     load_url_params.override_user_agent = content::NavigationController::UA_OVERRIDE_TRUE;
+    if (params.uses_post) {
+        load_url_params.load_type = content::NavigationController::LOAD_TYPE_BROWSER_INITIATED_HTTP_POST;
+        load_url_params.browser_initiated_post_data = params.browser_initiated_post_data;
+    }
 
     target->GetController().LoadURLWithParams(load_url_params);
     return target;
@@ -152,7 +160,7 @@ bool WebContentsDelegateQt::ShouldPreserveAbortedURLs(content::WebContents *sour
 void WebContentsDelegateQt::AddNewContents(content::WebContents* source, content::WebContents* new_contents, WindowOpenDisposition disposition, const gfx::Rect& initial_pos, bool user_gesture, bool* was_blocked)
 {
     Q_UNUSED(source)
-    WebContentsAdapter *newAdapter = createWindow(new_contents, disposition, initial_pos, user_gesture);
+    QWeakPointer<WebContentsAdapter> newAdapter = createWindow(new_contents, disposition, initial_pos, user_gesture);
     if (was_blocked)
         *was_blocked = !newAdapter;
 }
@@ -318,7 +326,11 @@ void WebContentsDelegateQt::RunFileChooser(content::WebContents *web_contents, c
         acceptedMimeTypes.append(toQt(*it));
 
     FilePickerController *controller = new FilePickerController(static_cast<FilePickerController::FileChooserMode>(params.mode), web_contents, toQt(params.default_file_name.value()), acceptedMimeTypes);
-    m_viewClient->runFileChooser(controller);
+
+    // Defer the call to not block base::MessageLoop::RunTask with modal dialogs.
+    QTimer::singleShot(0, [this, controller] () {
+        m_viewClient->runFileChooser(controller);
+    });
 }
 
 bool WebContentsDelegateQt::AddMessageToConsole(content::WebContents *source, int32_t level, const base::string16 &message, int32_t line_no, const base::string16 &source_id)
@@ -389,20 +401,13 @@ void WebContentsDelegateQt::overrideWebPreferences(content::WebContents *, conte
     m_viewClient->webEngineSettings()->overrideWebPreferences(webPreferences);
 }
 
-WebContentsAdapter *WebContentsDelegateQt::createWindow(content::WebContents *new_contents, WindowOpenDisposition disposition, const gfx::Rect& initial_pos, bool user_gesture)
+QWeakPointer<WebContentsAdapter> WebContentsDelegateQt::createWindow(content::WebContents *new_contents, WindowOpenDisposition disposition, const gfx::Rect& initial_pos, bool user_gesture)
 {
-    WebContentsAdapter *newAdapter = new WebContentsAdapter(new_contents);
-    // Do the first ref-count manually to be able to know if the application is handling adoptNewWindow through the public API.
-    newAdapter->ref.ref();
+    QSharedPointer<WebContentsAdapter> newAdapter = QSharedPointer<WebContentsAdapter>::create(new_contents);
 
     m_viewClient->adoptNewWindow(newAdapter, static_cast<WebContentsAdapterClient::WindowOpenDisposition>(disposition), user_gesture, toQt(initial_pos));
 
-    if (!newAdapter->ref.deref()) {
-        // adoptNewWindow didn't increase the ref-count, newAdapter and its new_contents (if non-null) need to be discarded.
-        delete newAdapter;
-        newAdapter = 0;
-    }
-
+    // If the client didn't reference the adapter, it will be deleted now, and the weak pointer zeroed.
     return newAdapter;
 }
 

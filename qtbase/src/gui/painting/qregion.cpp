@@ -89,7 +89,7 @@ QT_BEGIN_NAMESPACE
 
     \section1 Additional License Information
 
-    On Embedded Linux, Windows CE and X11 platforms, parts of this class rely on
+    On Embedded Linux and X11 platforms, parts of this class rely on
     code obtained under the following licenses:
 
     \legalese
@@ -943,7 +943,7 @@ QRegion QRegion::intersect(const QRect &r) const
        sort key and X as the minor sort key.
     \endlist
     \omit
-    Only some platforms have these restrictions (Qt for Embedded Linux, X11 and OS X).
+    Only some platforms have these restrictions (Qt for Embedded Linux, X11 and \macos).
     \endomit
 */
 

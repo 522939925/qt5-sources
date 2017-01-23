@@ -42,7 +42,6 @@
 
 #include "qtwebenginecoreglobal.h"
 
-#include <QExplicitlySharedDataPointer>
 #include <QScopedPointer>
 #include <QHash>
 #include <QUrl>
@@ -80,7 +79,8 @@ public:
         WebGLEnabled,
         Accelerated2dCanvasEnabled,
         AutoLoadIconsForPage,
-        TouchIconsEnabled
+        TouchIconsEnabled,
+        AllowRunningInsecureContent
     };
 
     // Must match the values from the public API in qwebenginesettings.h.

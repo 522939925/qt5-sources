@@ -1203,10 +1203,11 @@ static QTime qTimeData(int index)
     case 57: return QTime(23, 59, 59, 99);
     case 58: return QTime(23, 59, 59, 100);
     case 59: return QTime(23, 59, 59, 999);
+    case 60: return QTime();
     }
     return QTime(0, 0, 0);
 }
-#define MAX_QTIME_DATA 60
+#define MAX_QTIME_DATA 61
 
 void tst_QDataStream::stream_QTime_data()
 {
@@ -2748,26 +2749,44 @@ void tst_QDataStream::status_QBitArray()
     QCOMPARE(str, expectedString);
 }
 
-#define MAP_TEST(byteArray, expectedStatus, expectedHash) \
-    { \
-        QByteArray ba = byteArray; \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> hash; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(hash.size(), expectedHash.size()); \
-        QCOMPARE(hash, expectedHash); \
-    } \
-    { \
-        QByteArray ba = byteArray; \
-        StringMap expectedMap; \
-        StringHash::const_iterator it = expectedHash.constBegin(); \
-        for (; it != expectedHash.constEnd(); ++it) \
-            expectedMap.insert(it.key(), it.value()); \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> map; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(map.size(), expectedMap.size()); \
-        QCOMPARE(map, expectedMap); \
+#define MAP_TEST(byteArray, initialStatus, expectedStatus, expectedHash) \
+    for (bool inTransaction = false;; inTransaction = true) { \
+        { \
+            QByteArray ba = byteArray; \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> hash; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(hash.size(), expectedHash.size()); \
+                QCOMPARE(hash, expectedHash); \
+            } else { \
+                QVERIFY(hash.isEmpty()); \
+            } \
+        } \
+        { \
+            QByteArray ba = byteArray; \
+            StringMap expectedMap; \
+            StringHash::const_iterator it = expectedHash.constBegin(); \
+            for (; it != expectedHash.constEnd(); ++it) \
+                expectedMap.insert(it.key(), it.value()); \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> map; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(map.size(), expectedMap.size()); \
+                QCOMPARE(map, expectedMap); \
+            } else { \
+                QVERIFY(map.isEmpty()); \
+            } \
+        } \
+        if (inTransaction) \
+            break; \
     }
 
 void tst_QDataStream::status_QHash_QMap()
@@ -2785,57 +2804,87 @@ void tst_QDataStream::status_QHash_QMap()
     hash2.insert("L", "MN");
 
     // ok
-    MAP_TEST(QByteArray("\x00\x00\x00\x00", 4), QDataStream::Ok, StringHash());
-    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", 12), QDataStream::Ok, hash1);
+    MAP_TEST(QByteArray("\x00\x00\x00\x00", 4), QDataStream::Ok, QDataStream::Ok, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", 12), QDataStream::Ok, QDataStream::Ok, hash1);
     MAP_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x02\x00J\x00\x00\x00\x02\x00K"
-                        "\x00\x00\x00\x02\x00L\x00\x00\x00\x04\x00M\x00N", 30), QDataStream::Ok, hash2);
+                        "\x00\x00\x00\x02\x00L\x00\x00\x00\x04\x00M\x00N", 30), QDataStream::Ok, QDataStream::Ok, hash2);
 
     // past end
-    MAP_TEST(QByteArray(), QDataStream::ReadPastEnd, StringHash());
-    MAP_TEST(QByteArray("\x00", 1), QDataStream::ReadPastEnd, StringHash());
-    MAP_TEST(QByteArray("\x00\x00", 2), QDataStream::ReadPastEnd, StringHash());
-    MAP_TEST(QByteArray("\x00\x00\x00", 3), QDataStream::ReadPastEnd, StringHash());
-    MAP_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray(), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray("\x00", 1), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray("\x00\x00", 2), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00", 3), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
     for (int i = 4; i < 12; ++i) {
-        MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", i), QDataStream::ReadPastEnd, StringHash());
+        MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", i), QDataStream::Ok, QDataStream::ReadPastEnd, StringHash());
     }
 
     // corrupt data
-    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::ReadCorruptData, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::Ok, QDataStream::ReadCorruptData, StringHash());
     MAP_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x01\x00J\x00\x00\x00\x01\x00K"
-                        "\x00\x00\x00\x01\x00L\x00\x00\x00\x02\x00M\x00N", 30), QDataStream::ReadCorruptData, StringHash());
+                        "\x00\x00\x00\x01\x00L\x00\x00\x00\x02\x00M\x00N", 30), QDataStream::Ok, QDataStream::ReadCorruptData, StringHash());
+
+    // test the previously latched error status is not affected by reading
+    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00", 12), QDataStream::ReadPastEnd, QDataStream::ReadPastEnd, hash1);
+    MAP_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::ReadCorruptData, QDataStream::ReadCorruptData, StringHash());
+    MAP_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::ReadPastEnd, QDataStream::ReadPastEnd, StringHash());
 }
 
-#define LIST_TEST(byteArray, expectedStatus, expectedList) \
-    { \
-        QByteArray ba = byteArray; \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> list; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(list.size(), expectedList.size()); \
-        QCOMPARE(list, expectedList); \
-    } \
-    { \
-        LinkedList expectedLinkedList; \
-        for (int i = 0; i < expectedList.count(); ++i) \
-            expectedLinkedList << expectedList.at(i); \
-        QByteArray ba = byteArray; \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> linkedList; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(linkedList.size(), expectedLinkedList.size()); \
-        QCOMPARE(linkedList, expectedLinkedList); \
-    } \
-    { \
-        Vector expectedVector; \
-        for (int i = 0; i < expectedList.count(); ++i) \
-            expectedVector << expectedList.at(i); \
-        QByteArray ba = byteArray; \
-        QDataStream stream(&ba, QIODevice::ReadOnly); \
-        stream >> vector; \
-        QCOMPARE((int)stream.status(), (int)expectedStatus); \
-        QCOMPARE(vector.size(), expectedVector.size()); \
-        QCOMPARE(vector, expectedVector); \
+#define LIST_TEST(byteArray, initialStatus, expectedStatus, expectedList) \
+    for (bool inTransaction = false;; inTransaction = true) { \
+        { \
+            QByteArray ba = byteArray; \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> list; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(list.size(), expectedList.size()); \
+                QCOMPARE(list, expectedList); \
+            } else { \
+                QVERIFY(list.isEmpty()); \
+            } \
+        } \
+        { \
+            LinkedList expectedLinkedList; \
+            for (int i = 0; i < expectedList.count(); ++i) \
+                expectedLinkedList << expectedList.at(i); \
+            QByteArray ba = byteArray; \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> linkedList; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(linkedList.size(), expectedLinkedList.size()); \
+                QCOMPARE(linkedList, expectedLinkedList); \
+            } else { \
+                QVERIFY(linkedList.isEmpty()); \
+            } \
+        } \
+        { \
+            Vector expectedVector; \
+            for (int i = 0; i < expectedList.count(); ++i) \
+                expectedVector << expectedList.at(i); \
+            QByteArray ba = byteArray; \
+            QDataStream stream(&ba, QIODevice::ReadOnly); \
+            if (inTransaction) \
+                stream.startTransaction(); \
+            stream.setStatus(initialStatus); \
+            stream >> vector; \
+            QCOMPARE((int)stream.status(), (int)expectedStatus); \
+            if (!inTransaction || stream.commitTransaction()) { \
+                QCOMPARE(vector.size(), expectedVector.size()); \
+                QCOMPARE(vector, expectedVector); \
+            } else { \
+                QVERIFY(vector.isEmpty()); \
+            } \
+        } \
+        if (inTransaction) \
+            break; \
     }
 
 void tst_QDataStream::status_QLinkedList_QList_QVector()
@@ -2847,8 +2896,49 @@ void tst_QDataStream::status_QLinkedList_QList_QVector()
     List list;
     Vector vector;
 
-    LIST_TEST(QByteArray(), QDataStream::ReadPastEnd, List());
-    LIST_TEST(QByteArray("\x00\x00\x00\x00", 4), QDataStream::Ok, List());
+    // ok
+    {
+        List listWithEmptyString;
+        listWithEmptyString.append("");
+
+        List someList;
+        someList.append("J");
+        someList.append("MN");
+
+        LIST_TEST(QByteArray("\x00\x00\x00\x00", 4), QDataStream::Ok, QDataStream::Ok, List());
+        LIST_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00", 8), QDataStream::Ok, QDataStream::Ok, listWithEmptyString);
+        LIST_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x02\x00J"
+                             "\x00\x00\x00\x04\x00M\x00N", 18), QDataStream::Ok, QDataStream::Ok, someList);
+    }
+
+    // past end
+    {
+        LIST_TEST(QByteArray(), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        LIST_TEST(QByteArray("\x00", 1), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        LIST_TEST(QByteArray("\x00\x00", 2), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        LIST_TEST(QByteArray("\x00\x00\x00", 3), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        LIST_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        for (int i = 4; i < 12; ++i) {
+            LIST_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00", i), QDataStream::Ok, QDataStream::ReadPastEnd, List());
+        }
+    }
+
+    // corrupt data
+    {
+        LIST_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::Ok, QDataStream::ReadCorruptData, List());
+        LIST_TEST(QByteArray("\x00\x00\x00\x02\x00\x00\x00\x01\x00J"
+                             "\x00\x00\x00\x02\x00M\x00N", 18), QDataStream::Ok, QDataStream::ReadCorruptData, List());
+    }
+
+    // test the previously latched error status is not affected by reading
+    {
+        List listWithEmptyString;
+        listWithEmptyString.append("");
+
+        LIST_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x00", 8), QDataStream::ReadPastEnd, QDataStream::ReadPastEnd, listWithEmptyString);
+        LIST_TEST(QByteArray("\x00\x00\x00\x01", 4), QDataStream::ReadCorruptData, QDataStream::ReadCorruptData, List());
+        LIST_TEST(QByteArray("\x00\x00\x00\x01\x00\x00\x00\x01", 8), QDataStream::ReadPastEnd, QDataStream::ReadPastEnd, List());
+    }
 }
 
 void tst_QDataStream::streamToAndFromQByteArray()
@@ -3081,6 +3171,30 @@ void tst_QDataStream::compatibility_Qt3()
         QCOMPARE(in_palette.brush(QPalette::Button).style(), Qt::NoBrush);
         QCOMPARE(in_palette.color(QPalette::Light), QColor(Qt::green));
     }
+    // QTime() was serialized to (0, 0, 0, 0) in Qt3, not (0xFF, 0xFF, 0xFF, 0xFF)
+    // This is because in Qt3 a null time was valid, and there was no support for deserializing a value of -1.
+    {
+        QByteArray stream;
+        {
+            QDataStream out(&stream, QIODevice::WriteOnly);
+            out.setVersion(QDataStream::Qt_3_3);
+            out << QTime();
+        }
+        QTime in_time;
+        {
+            QDataStream in(stream);
+            in.setVersion(QDataStream::Qt_3_3);
+            in >> in_time;
+        }
+        QVERIFY(in_time.isNull());
+
+        quint32 rawValue;
+        QDataStream in(stream);
+        in.setVersion(QDataStream::Qt_3_3);
+        in >> rawValue;
+        QCOMPARE(rawValue, quint32(0));
+    }
+
 }
 
 void tst_QDataStream::compatibility_Qt2()

@@ -58,6 +58,7 @@
 #include <Qt3DCore/private/qeventfilterservice_p.h>
 #include <Qt3DCore/private/qnodecreatedchangegenerator_p.h>
 #include <Qt3DCore/private/qservicelocator_p.h>
+#include <Qt3DCore/private/aspectcommanddebugger_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -73,6 +74,9 @@ QAspectEnginePrivate::QAspectEnginePrivate()
     , m_postman(nullptr)
     , m_scene(nullptr)
     , m_initialized(false)
+    #ifdef QT3D_JOBS_RUN_STATS
+    , m_commandDebugger(new Debug::AspectCommandDebugger(q_func()))
+    #endif // QT3D_JOBS_RUN_STATS
 {
     qRegisterMetaType<Qt3DCore::QAbstractAspect *>();
     qRegisterMetaType<Qt3DCore::QObserverInterface *>();
@@ -122,7 +126,41 @@ void QAspectEnginePrivate::generateCreationChanges(QNode *root)
  * \class Qt3DCore::QAspectEngine
  * \inherits QObject
  * \inmodule Qt3DCore
- * \brief Responsible for handling all the QAbstractAspect subclasses that have been registered with the scene.
+ *
+ * \brief Responsible for handling all the QAbstractAspect subclasses that have
+ * been registered with the scene.
+ *
+ * The Qt3D run loop is controlled by the Qt3DRender::QAspectEngine.
+ *
+ * Qt3DCore::QAbstractAspect subclasses can be registered by calling
+ * Qt3DCore::QAspectEngine::registerAspect() which will take care of registering
+ * the aspect and in turn that will call Qt3DCore::QAbstractAspect::onRegistered();
+ *
+ * The simulation loop is launched as soon as a root Qt3DCore::QEntity
+ * is set on the Qt3DCore::QAspectEngine. This is followed by a call to
+ * onEngineStartup() on each aspect so that they can start their simulation
+ * work.
+ *
+ * The simulation loop is stopped when the root entity is set to
+ * Qt3DCore::QEntityPtr(). This calls onEngineShutdown() on each aspect so
+ * that they can stop performing their simulation work.
+ *
+ * Setting a new valid root entity would restart the simulation loop again.
+ */
+
+/*!
+ * \internal
+ * This loop is executed in a separate thread called the AspectThread in
+ * Qt3DCore::QAspectThread. This thread is started when the
+ * Qt3DCore::QAspectEngine is created and provides the
+ * Qt3DCore::QAspectManager which lives in this thread for as long as it's
+ * running.
+ *
+ * Once the AspectThread is running, it starts the run loop and waits for
+ * aspects to be registered.
+ *
+ * Destroying the Qt3DCore::QAspectEngine instance stops the AspectThread and
+ * properly terminates the run loop.
  */
 
 /*!
@@ -159,6 +197,8 @@ QAspectEngine::~QAspectEngine()
     Q_D(QAspectEngine);
 
     // Shutdown the simulation loop by setting an empty scene
+    // Note: this sets an atomic which allows the AspectThread to break out of
+    // the inner simulation loop in the AspectThread::exec function
     setRootEntity(QEntityPtr());
 
     // Unregister all aspects and exit the main loop
@@ -166,6 +206,7 @@ QAspectEngine::~QAspectEngine()
     for (auto aspect : aspects)
         unregisterAspect(aspect);
 
+    // Wait for thread to have completed it's final loop of execution
     d->m_aspectThread->aspectManager()->quit();
     d->m_aspectThread->wait();
 
@@ -192,6 +233,10 @@ void QAspectEnginePrivate::initialize()
                               "setScene",
                               Q_ARG(Qt3DCore::QScene*, m_scene));
     m_initialized = true;
+#ifdef QT3D_JOBS_RUN_STATS
+    m_commandDebugger->setAspectEngine(q_func());
+    m_commandDebugger->initialize();
+#endif // QT3D_JOBS_RUN_STATS
 }
 
 /*!
@@ -254,7 +299,7 @@ void QAspectEngine::registerAspect(QAbstractAspect *aspect)
 void QAspectEngine::registerAspect(const QString &name)
 {
     Q_D(QAspectEngine);
-    QAbstractAspect *aspect = d->m_factory.createAspect(name);
+    QAbstractAspect *aspect = d->m_factory.createAspect(QLatin1String(name.toUtf8()));
     if (aspect) {
         registerAspect(aspect);
         d->m_namedAspects.insert(name, aspect);

@@ -153,10 +153,6 @@ QT_BEGIN_NAMESPACE
     On Windows, the variable names are case-insensitive, but case-preserving.
     QProcessEnvironment behaves accordingly.
 
-    On Windows CE, the concept of environment does not exist. This class will
-    keep the values set for compatibility with other platforms, but the values
-    set will have no effect on the processes being created.
-
     \sa QProcess, QProcess::systemEnvironment(), QProcess::setProcessEnvironment()
 */
 
@@ -505,9 +501,6 @@ void QProcessPrivate::Channel::clear()
     used as an input source for QXmlReader, or for generating data to
     be uploaded using QNetworkAccessManager.
 
-    \note On Windows CE, reading and writing to a process
-    is not supported.
-
     When the process exits, QProcess reenters the \l NotRunning state
     (the initial state), and emits finished().
 
@@ -753,7 +746,7 @@ void QProcessPrivate::Channel::clear()
 
 /*!
     \typedef QProcess::CreateProcessArgumentModifier
-    \note This typedef is only available on desktop Windows and Windows CE.
+    \note This typedef is only available on desktop Windows.
 
     On Windows, QProcess uses the Win32 API function \c CreateProcess to
     start child processes. While QProcess provides a comfortable way to start
@@ -1787,9 +1780,6 @@ void QProcess::setEnvironment(const QStringList &environment)
     using setEnvironment(). If no environment has been set, the
     environment of the calling process will be used.
 
-    \note The environment settings are ignored on Windows CE,
-    as there is no concept of an environment.
-
     \sa processEnvironment(), setEnvironment(), systemEnvironment()
 */
 QStringList QProcess::environment() const
@@ -1822,9 +1812,6 @@ void QProcess::setProcessEnvironment(const QProcessEnvironment &environment)
     process, or an empty object if no environment has been set using
     setEnvironment() or setProcessEnvironment(). If no environment has
     been set, the environment of the calling process will be used.
-
-    \note The environment settings are ignored on Windows CE,
-    as there is no concept of an environment.
 
     \sa setProcessEnvironment(), setEnvironment(), QProcessEnvironment::isEmpty()
 */
@@ -1951,7 +1938,7 @@ void QProcess::setProcessState(ProcessState state)
 
 /*!
   This function is called in the child process context just before the
-    program is executed on Unix or OS X (i.e., after \c fork(), but before
+    program is executed on Unix or \macos (i.e., after \c fork(), but before
     \c execve()). Reimplement this function to do last minute initialization
     of the child process. Example:
 
@@ -1962,7 +1949,7 @@ void QProcess::setProcessState(ProcessState state)
     execution, your workaround is to emit finished() and then call
     exit().
 
-    \warning This function is called by QProcess on Unix and OS X
+    \warning This function is called by QProcess on Unix and \macos
     only. On Windows and QNX, it is not called.
 */
 void QProcess::setupChildProcess()
@@ -2097,10 +2084,7 @@ void QProcess::start(const QString &program, const QStringList &arguments, OpenM
         return;
     }
     if (program.isEmpty()) {
-        Q_D(QProcess);
-        d->processError = QProcess::FailedToStart;
-        setErrorString(tr("No program defined"));
-        emit error(d->processError);
+        d->setErrorAndEmit(QProcess::FailedToStart, tr("No program defined"));
         return;
     }
 
@@ -2127,10 +2111,7 @@ void QProcess::start(OpenMode mode)
         return;
     }
     if (d->program.isEmpty()) {
-        Q_D(QProcess);
-        d->processError = QProcess::FailedToStart;
-        setErrorString(tr("No program defined"));
-        emit error(d->processError);
+        d->setErrorAndEmit(QProcess::FailedToStart, tr("No program defined"));
         return;
     }
 
@@ -2368,7 +2349,7 @@ void QProcess::setArguments(const QStringList &arguments)
 
     On Windows, terminate() posts a WM_CLOSE message to all top-level windows
     of the process and then to the main thread of the process itself. On Unix
-    and OS X the \c SIGTERM signal is sent.
+    and \macos the \c SIGTERM signal is sent.
 
     Console applications on Windows that do not run an event loop, or whose
     event loop does not handle the WM_CLOSE message, can only be terminated by
@@ -2385,7 +2366,7 @@ void QProcess::terminate()
 /*!
     Kills the current process, causing it to exit immediately.
 
-    On Windows, kill() uses TerminateProcess, and on Unix and OS X, the
+    On Windows, kill() uses TerminateProcess, and on Unix and \macos, the
     SIGKILL signal is sent to the process.
 
     \sa terminate()

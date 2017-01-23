@@ -824,10 +824,8 @@ void QFontDialog::setCurrentFont(const QFont &font)
     d->strikeout->setChecked(font.strikeOut());
     d->underline->setChecked(font.underline());
     d->updateFamilies();
-    if (d->canBeNativeDialog()) {
-        if (QPlatformFontDialogHelper *helper = d->platformFontDialogHelper())
-            helper->setCurrentFont(font);
-    }
+    if (QPlatformFontDialogHelper *helper = d->platformFontDialogHelper())
+        helper->setCurrentFont(font);
 }
 
 /*!
@@ -840,10 +838,8 @@ void QFontDialog::setCurrentFont(const QFont &font)
 QFont QFontDialog::currentFont() const
 {
     Q_D(const QFontDialog);
-    if (d->canBeNativeDialog()) {
-        if (const QPlatformFontDialogHelper *helper = d->platformFontDialogHelper())
-            return helper->currentFont();
-    }
+    if (const QPlatformFontDialogHelper *helper = d->platformFontDialogHelper())
+        return helper->currentFont();
     return d->sampleEdit->font();
 }
 
@@ -1040,7 +1036,9 @@ void QFontDialog::done(int result)
 
 bool QFontDialogPrivate::canBeNativeDialog() const
 {
-    Q_Q(const QFontDialog);
+    // Don't use Q_Q here! This function is called from ~QDialog,
+    // so Q_Q calling q_func() invokes undefined behavior (invalid cast in q_func()).
+    const QDialog * const q = static_cast<const QDialog*>(q_ptr);
     if (nativeDialogInUse)
         return true;
     if (QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs)

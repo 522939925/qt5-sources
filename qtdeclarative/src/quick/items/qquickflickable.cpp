@@ -65,7 +65,9 @@ static const int FlickThreshold = 15;
 // will ensure the Flickable retains the grab on consecutive flicks.
 static const int RetainGrabVelocity = 100;
 
+#ifdef Q_OS_OSX
 static const int MovementEndingTimerInterval = 100;
+#endif
 
 static qreal EaseOvershoot(qreal t) {
     return qAtan(t);
@@ -884,7 +886,7 @@ QQuickFlickableVisibleArea *QQuickFlickable::visibleArea()
     \li Flickable.AutoFlickIfNeeded - allows flicking vertically if the
     \e contentHeight is greater than the \e height of the Flickable.
     Allows flicking horizontally if the \e contentWidth is greater than
-    to the \e width of the Flickable.
+    to the \e width of the Flickable. (since \c{QtQuick 2.7})
     \li Flickable.HorizontalFlick - allows flicking horizontally.
     \li Flickable.VerticalFlick - allows flicking vertically.
     \li Flickable.HorizontalAndVerticalFlick - allows flicking in both directions.
@@ -1232,13 +1234,17 @@ void QQuickFlickablePrivate::handleMouseMoveEvent(QMouseEvent *event)
         return;
 
     qint64 currentTimestamp = computeCurrentTime(event);
-    qreal elapsed = qreal(currentTimestamp - (lastPos.isNull() ? lastPressTime : lastPosTime)) / 1000.;
     QVector2D deltas = QVector2D(event->localPos() - pressPos);
     bool overThreshold = false;
     QVector2D velocity = QGuiApplicationPrivate::mouseEventVelocity(event);
     // TODO guarantee that events always have velocity so that it never needs to be computed here
-    if (!(QGuiApplicationPrivate::mouseEventCaps(event) & QTouchDevice::Velocity))
+    if (!(QGuiApplicationPrivate::mouseEventCaps(event) & QTouchDevice::Velocity)) {
+        qint64 lastTimestamp = (lastPos.isNull() ? lastPressTime : lastPosTime);
+        if (currentTimestamp == lastTimestamp)
+            return; // events are too close together: velocity would be infinite
+        qreal elapsed = qreal(currentTimestamp - lastTimestamp) / 1000.;
         velocity = QVector2D(event->localPos() - (lastPos.isNull() ? pressPos : lastPos)) / elapsed;
+    }
 
     if (q->yflick())
         overThreshold |= QQuickWindowPrivate::dragOverThreshold(deltas.y(), Qt::YAxis, event);
@@ -1533,11 +1539,11 @@ void QQuickFlickablePrivate::replayDelayedPress()
 
         // If we have the grab, release before delivering the event
         if (QQuickWindow *w = q->window()) {
+            replayingPressEvent = true;
             if (w->mouseGrabberItem() == q)
                 q->ungrabMouse();
 
             // Use the event handler that will take care of finding the proper item to propagate the event
-            replayingPressEvent = true;
             QCoreApplication::sendEvent(w, mouseEvent.data());
             replayingPressEvent = false;
         }
@@ -1567,7 +1573,7 @@ void QQuickFlickable::timerEvent(QTimerEvent *event)
         d->movementEndingTimer.stop();
         d->pressed = false;
         d->stealMouse = false;
-        if (!d->velocityTimeline.isActive())
+        if (!d->velocityTimeline.isActive() && !d->timeline.isActive())
             movementEnding(true, true);
     }
 }
@@ -1588,13 +1594,13 @@ qreal QQuickFlickable::minXExtent() const
 qreal QQuickFlickable::maxXExtent() const
 {
     Q_D(const QQuickFlickable);
-    return qMin<qreal>(0, width() - vWidth() - d->hData.endMargin);
+    return qMin<qreal>(minXExtent(), width() - vWidth() - d->hData.endMargin);
 }
 /* returns -ve */
 qreal QQuickFlickable::maxYExtent() const
 {
     Q_D(const QQuickFlickable);
-    return qMin<qreal>(0, height() - vHeight() - d->vData.endMargin);
+    return qMin<qreal>(minYExtent(), height() - vHeight() - d->vData.endMargin);
 }
 
 void QQuickFlickable::componentComplete()
@@ -1620,7 +1626,7 @@ void QQuickFlickable::viewportMoved(Qt::Orientations orient)
 void QQuickFlickablePrivate::viewportAxisMoved(AxisData &data, qreal minExtent, qreal maxExtent, qreal vSize,
                                            QQuickTimeLineCallback::Callback fixupCallback)
 {
-    if (pressed || calcVelocity) {
+    if (!scrollingPhase && (pressed || calcVelocity)) {
         int elapsed = data.velocityTime.restart();
         if (elapsed > 0) {
             qreal velocity = (data.lastPos - data.move.value()) * 1000 / elapsed;
@@ -2193,7 +2199,8 @@ void QQuickFlickable::mouseUngrabEvent()
     Q_D(QQuickFlickable);
     // if our mouse grab has been removed (probably by another Flickable),
     // fix our state
-    d->cancelInteraction();
+    if (!d->replayingPressEvent)
+        d->cancelInteraction();
 }
 
 void QQuickFlickablePrivate::cancelInteraction()

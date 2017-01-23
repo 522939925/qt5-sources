@@ -152,7 +152,7 @@ QWaylandKeymap::QWaylandKeymap(const QString &layout, const QString &variant, co
  * \class QWaylandInputDevice
  * \inmodule QtWaylandCompositor
  * \preliminary
- * \brief The QWaylandInputDevice class provides access to keyboard, mouse and touch input.
+ * \brief The QWaylandInputDevice class provides access to keyboard, mouse, and touch input.
  *
  * The QWaylandInputDevice provides access to different types of user input and maintains
  * a keyboard focus and a mouse pointer. It corresponds to the wl_seat interface in the Wayland protocol.
@@ -467,7 +467,7 @@ QWaylandInputDevice *QWaylandInputDevice::fromSeatResource(struct ::wl_resource 
 }
 
 /*!
- * \fn void mouseFocusChanged(QWaylandView *newFocus, QWaylandView *oldFocus)
+ * \fn void QWaylandInputDevice::mouseFocusChanged(QWaylandView *newFocus, QWaylandView *oldFocus)
  *
  * This signal is emitted when the mouse focus has changed from \a oldFocus to \a newFocus.
  */

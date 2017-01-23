@@ -2161,6 +2161,9 @@ bool QDockAreaLayoutInfo::updateTabBar() const
     if (oldCurrentId > 0 && currentTabId() != oldCurrentId)
         that->setCurrentTabId(oldCurrentId);
 
+    if (QDockWidgetGroupWindow *dwgw = qobject_cast<QDockWidgetGroupWindow *>(tabBar->parent()))
+        dwgw->adjustFlags();
+
     //returns if the tabbar is visible or not
     return ( (gap ? 1 : 0) + tabBar->count()) > 1;
 }
@@ -2607,6 +2610,21 @@ void QDockAreaLayout::remove(const QList<int> &path)
     docks[index].remove(path.mid(1));
 }
 
+void QDockAreaLayout::removePlaceHolder(const QString &name)
+{
+    QList<int> index = indexOfPlaceHolder(name);
+    if (!index.isEmpty())
+        remove(index);
+    foreach (QDockWidgetGroupWindow *dwgw, mainWindow->findChildren<QDockWidgetGroupWindow *>(
+                                               QString(), Qt::FindDirectChildrenOnly)) {
+        index = dwgw->layoutInfo()->indexOfPlaceHolder(name);
+        if (!index.isEmpty()) {
+            dwgw->layoutInfo()->remove(index);
+            dwgw->destroyOrHideIfEmpty();
+        }
+    }
+}
+
 static inline int qMax(int i1, int i2, int i3) { return qMax(i1, qMax(i2, i3)); }
 
 void QDockAreaLayout::getGrid(QVector<QLayoutStruct> *_ver_struct_list,
@@ -3033,15 +3051,27 @@ QRect QDockAreaLayout::constrainedRect(QRect rect, QWidget* widget)
 
 bool QDockAreaLayout::restoreDockWidget(QDockWidget *dockWidget)
 {
-    QList<int> index = indexOfPlaceHolder(dockWidget->objectName());
-    if (index.isEmpty())
-        return false;
+    QDockAreaLayoutItem *item = 0;
+    foreach (QDockWidgetGroupWindow *dwgw, mainWindow->findChildren<QDockWidgetGroupWindow *>(
+                                               QString(), Qt::FindDirectChildrenOnly)) {
+        QList<int> index = dwgw->layoutInfo()->indexOfPlaceHolder(dockWidget->objectName());
+        if (!index.isEmpty()) {
+            dockWidget->setParent(dwgw);
+            item = const_cast<QDockAreaLayoutItem *>(&dwgw->layoutInfo()->item(index));
+            break;
+        }
+    }
+    if (!item) {
+        QList<int> index = indexOfPlaceHolder(dockWidget->objectName());
+        if (index.isEmpty())
+            return false;
+        item = const_cast<QDockAreaLayoutItem *>(&this->item(index));
+    }
 
-    QDockAreaLayoutItem &item = this->item(index);
-    QPlaceHolderItem *placeHolder = item.placeHolderItem;
+    QPlaceHolderItem *placeHolder = item->placeHolderItem;
     Q_ASSERT(placeHolder != 0);
 
-    item.widgetItem = new QDockWidgetItem(dockWidget);
+    item->widgetItem = new QDockWidgetItem(dockWidget);
 
     if (placeHolder->window) {
         const QRect r = constrainedRect(placeHolder->topLevelRect, dockWidget);
@@ -3053,7 +3083,7 @@ bool QDockAreaLayout::restoreDockWidget(QDockWidget *dockWidget)
         dockWidget->d_func()->setWindowState(true);
 #endif
 
-    item.placeHolderItem = 0;
+    item->placeHolderItem = 0;
     delete placeHolder;
 
     return true;
@@ -3089,9 +3119,7 @@ void QDockAreaLayout::addDockWidget(QInternal::DockPosition pos, QDockWidget *do
         info = new_info;
     }
 
-    QList<int> index = indexOfPlaceHolder(dockWidget->objectName());
-    if (!index.isEmpty())
-        remove(index);
+    removePlaceHolder(dockWidget->objectName());
 }
 
 void QDockAreaLayout::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
@@ -3104,9 +3132,7 @@ void QDockAreaLayout::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
     Q_ASSERT(info != 0);
     info->tab(path.last(), new QDockWidgetItem(second));
 
-    QList<int> index = indexOfPlaceHolder(second->objectName());
-    if (!index.isEmpty())
-        remove(index);
+    removePlaceHolder(second->objectName());
 }
 
 void QDockAreaLayout::resizeDocks(const QList<QDockWidget *> &docks,
@@ -3160,7 +3186,7 @@ void QDockAreaLayout::splitDockWidget(QDockWidget *after,
                                                QDockWidget *dockWidget,
                                                Qt::Orientation orientation)
 {
-    QList<int> path = indexOf(after);
+    const QList<int> path = indexOf(after);
     if (path.isEmpty())
         return;
 
@@ -3168,9 +3194,7 @@ void QDockAreaLayout::splitDockWidget(QDockWidget *after,
     Q_ASSERT(info != 0);
     info->split(path.last(), orientation, new QDockWidgetItem(dockWidget));
 
-    QList<int> index = indexOfPlaceHolder(dockWidget->objectName());
-    if (!index.isEmpty())
-        remove(index);
+    removePlaceHolder(dockWidget->objectName());
 }
 
 void QDockAreaLayout::apply(bool animate)

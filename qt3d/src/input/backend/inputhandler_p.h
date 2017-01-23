@@ -61,6 +61,7 @@ QT_BEGIN_NAMESPACE
 
 namespace Qt3DCore {
 class QEventFilterService;
+class QNodeId;
 }
 
 namespace Qt3DInput {
@@ -69,6 +70,7 @@ class QInputDeviceIntegration;
 
 namespace Input {
 
+class AbstractActionInput;
 class KeyboardInputManager;
 class KeyboardDeviceManager;
 class KeyboardEventFilter;
@@ -144,6 +146,8 @@ public:
 
     void updateEventSource();
 
+    AbstractActionInput *lookupActionInput(Qt3DCore::QNodeId id) const;
+
 private:
     KeyboardDeviceManager *m_keyboardDeviceManager;
     KeyboardInputManager *m_keyboardInputManager;
@@ -176,6 +180,7 @@ private:
     QScopedPointer<EventSourceSetterHelper> m_eventSourceSetter;
 
     void registerEventFilters(Qt3DCore::QEventFilterService *service);
+    void unregisterEventFilters(Qt3DCore::QEventFilterService *service);
     friend class EventSourceSetterHelper;
 };
 

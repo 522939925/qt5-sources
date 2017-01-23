@@ -195,6 +195,8 @@ void QQuickToolTip::setText(const QString &text)
     This property holds the delay (milliseconds) after which the tool tip is
     shown. A tooltip with a negative delay is shown immediately. The default
     value is \c 0.
+
+    \sa {Delay and Timeout}
 */
 int QQuickToolTip::delay() const
 {
@@ -218,6 +220,8 @@ void QQuickToolTip::setDelay(int delay)
     This property holds the timeout (milliseconds) after which the tool tip is
     hidden. A tooltip with a negative timeout does not hide automatically. The
     default value is \c -1.
+
+    \sa {Delay and Timeout}
 */
 int QQuickToolTip::timeout() const
 {
@@ -240,29 +244,27 @@ void QQuickToolTip::setTimeout(int timeout)
     emit timeoutChanged();
 }
 
+void QQuickToolTip::setVisible(bool visible)
+{
+    Q_D(QQuickToolTip);
+    if (visible) {
+        if (!d->visible && d->delay > 0) {
+            d->startDelay();
+            return;
+        }
+    } else {
+        d->stopDelay();
+    }
+    QQuickPopup::setVisible(visible);
+}
+
 QQuickToolTipAttached *QQuickToolTip::qmlAttachedProperties(QObject *object)
 {
     QQuickItem *item = qobject_cast<QQuickItem *>(object);
     if (!item)
         qmlInfo(object) << "ToolTip must be attached to an Item";
 
-    return new QQuickToolTipAttached(item);
-}
-
-void QQuickToolTip::open()
-{
-    Q_D(QQuickToolTip);
-    if (d->delay > 0)
-        d->startDelay();
-    else
-        QQuickPopup::open();
-}
-
-void QQuickToolTip::close()
-{
-    Q_D(QQuickToolTip);
-    d->stopDelay();
-    QQuickPopup::close();
+    return new QQuickToolTipAttached(object);
 }
 
 QFont QQuickToolTip::defaultFont() const
@@ -291,10 +293,10 @@ void QQuickToolTip::timerEvent(QTimerEvent *event)
     Q_D(QQuickToolTip);
     if (event->timerId() == d->timeoutTimer.timerId()) {
         d->stopTimeout();
-        close();
+        QQuickPopup::setVisible(false);
     } else if (event->timerId() == d->delayTimer.timerId()) {
         d->stopDelay();
-        QQuickPopup::open();
+        QQuickPopup::setVisible(true);
     }
 }
 
@@ -321,32 +323,40 @@ public:
 
 QQuickToolTip *QQuickToolTipAttachedPrivate::instance(bool create) const
 {
-    static QPointer<QQuickToolTip> tip;
+    QQmlEngine *engine = qmlEngine(parent);
+    if (!engine)
+        return nullptr;
+
+    static const char *name = "_q_QQuickToolTip";
+
+    QQuickToolTip *tip = engine->property(name).value<QQuickToolTip *>();
     if (!tip && create) {
         // TODO: a cleaner way to create the instance? QQml(Meta)Type?
-        QQmlContext *context = qmlContext(parent);
-        if (context) {
-            QQmlComponent component(context->engine());
-            component.setData("import QtQuick.Controls 2.0; ToolTip { }", QUrl());
+        QQmlComponent component(engine);
+        component.setData("import QtQuick.Controls 2.0; ToolTip { }", QUrl());
 
-            QObject *object = component.create(context);
-            tip = qobject_cast<QQuickToolTip *>(object);
-            if (!tip)
-                delete object;
-        }
+        QObject *object = component.create();
+        if (object)
+            object->setParent(engine);
+
+        tip = qobject_cast<QQuickToolTip *>(object);
+        if (!tip)
+            delete object;
+        else
+            engine->setProperty(name, QVariant::fromValue(object));
     }
     return tip;
 }
 
-QQuickToolTipAttached::QQuickToolTipAttached(QQuickItem *item) :
-    QObject(*(new QQuickToolTipAttachedPrivate), item)
+QQuickToolTipAttached::QQuickToolTipAttached(QObject *parent) :
+    QObject(*(new QQuickToolTipAttachedPrivate), parent)
 {
 }
 
 /*!
     \qmlattachedproperty string QtQuick.Controls::ToolTip::text
 
-    This attached property holds the text of the shared tool tip instance.
+    This attached property holds the text of the shared tool tip.
     The property can be attached to any item.
 */
 QString QQuickToolTipAttached::text() const
@@ -364,8 +374,8 @@ void QQuickToolTipAttached::setText(const QString &text)
     d->text = text;
     emit textChanged();
 
-    if (QQuickToolTip *tip = d->instance(true))
-        tip->setText(text);
+    if (isVisible())
+        d->instance(true)->setText(text);
 }
 
 /*!
@@ -373,6 +383,8 @@ void QQuickToolTipAttached::setText(const QString &text)
 
     This attached property holds the delay (milliseconds) of the shared tool tip.
     The property can be attached to any item.
+
+    \sa {Delay and Timeout}
 */
 int QQuickToolTipAttached::delay() const
 {
@@ -388,6 +400,9 @@ void QQuickToolTipAttached::setDelay(int delay)
 
     d->delay = delay;
     emit delayChanged();
+
+    if (isVisible())
+        d->instance(true)->setDelay(delay);
 }
 
 /*!
@@ -395,6 +410,8 @@ void QQuickToolTipAttached::setDelay(int delay)
 
     This attached property holds the timeout (milliseconds) of the shared tool tip.
     The property can be attached to any item.
+
+    \sa {Delay and Timeout}
 */
 int QQuickToolTipAttached::timeout() const
 {
@@ -410,6 +427,9 @@ void QQuickToolTipAttached::setTimeout(int timeout)
 
     d->timeout = timeout;
     emit timeoutChanged();
+
+    if (isVisible())
+        d->instance(true)->setTimeout(timeout);
 }
 
 /*!

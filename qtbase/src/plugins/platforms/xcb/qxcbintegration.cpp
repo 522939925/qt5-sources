@@ -65,7 +65,7 @@
 #include <QtGui/private/qguiapplication_p.h>
 
 #ifdef XCB_USE_EGL
-#include <EGL/egl.h>
+# include <QtPlatformSupport/private/qt_egl_p.h>
 #endif
 
 #ifdef XCB_USE_XLIB
@@ -267,8 +267,13 @@ bool QXcbIntegration::hasCapability(QPlatformIntegration::Capability cap) const
     case ForeignWindows:
     case SyncState:
     case RasterGLSurface:
-    case SwitchableWidgetComposition:
         return true;
+
+    case SwitchableWidgetComposition:
+    {
+        return m_connections.at(0)->glIntegration()
+            && m_connections.at(0)->glIntegration()->supportsSwitchableWidgetComposition();
+    }
 
     default: return QPlatformIntegration::hasCapability(cap);
     }

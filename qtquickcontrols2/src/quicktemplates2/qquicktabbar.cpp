@@ -60,6 +60,29 @@ QT_BEGIN_NAMESPACE
 
     \snippet qtquickcontrols2-tabbar.qml 1
 
+    \section2 Resizing Tabs
+
+    By default, TabBar resizes its buttons to fit the width of the control.
+    The available space is distributed equally to each button. The default
+    resizing behavior can be overridden by setting an explicit width for the
+    buttons.
+
+    The following example illustrates how to keep each tab button at their
+    implicit size instead of being resized to fit the tabbar:
+
+    \borderedimage qtquickcontrols2-tabbar-explicit.png
+
+    \snippet qtquickcontrols2-tabbar-explicit.qml 1
+
+    \section2 Flickable Tabs
+
+    If the total width of the buttons exceeds the available width of the tab bar,
+    it automatically becomes flickable.
+
+    \image qtquickcontrols2-tabbar-flickable.png
+
+    \snippet qtquickcontrols2-tabbar-flickable.qml 1
+
     \sa TabButton, {Customizing TabBar}, {Navigation Controls}, {Container Controls}
 */
 
@@ -74,11 +97,15 @@ public:
     void updateCurrentIndex();
     void updateLayout();
 
+    void itemGeometryChanged(QQuickItem *item, const QRectF &newGeometry, const QRectF &oldGeometry) override;
+
+    bool updatingLayout;
     QQuickTabBar::Position position;
 };
 
-QQuickTabBarPrivate::QQuickTabBarPrivate() : position(QQuickTabBar::Header)
+QQuickTabBarPrivate::QQuickTabBarPrivate() : updatingLayout(false), position(QQuickTabBar::Header)
 {
+    changeTypes |= Geometry;
 }
 
 void QQuickTabBarPrivate::updateCurrentItem()
@@ -101,19 +128,39 @@ void QQuickTabBarPrivate::updateLayout()
     Q_Q(QQuickTabBar);
     const int count = contentModel->count();
     if (count > 0 && contentItem) {
-        const qreal itemWidth = (contentItem->width() - qMax(0, count - 1) * spacing) / count;
+        qreal reservedWidth = 0;
+        QVector<QQuickItem *> resizableItems;
+        resizableItems.reserve(count);
 
         for (int i = 0; i < count; ++i) {
             QQuickItem *item = q->itemAt(i);
             if (item) {
                 QQuickItemPrivate *p = QQuickItemPrivate::get(item);
-                if (!p->widthValid) {
-                    item->setWidth(itemWidth);
-                    p->widthValid = false;
-                }
+                if (!p->widthValid)
+                    resizableItems += item;
+                else
+                    reservedWidth += item->width();
             }
         }
+
+        if (!resizableItems.isEmpty()) {
+            const qreal totalSpacing = qMax(0, count - 1) * spacing;
+            const qreal itemWidth = (contentItem->width() - reservedWidth - totalSpacing) / resizableItems.count();
+
+            updatingLayout = true;
+            for (QQuickItem *item : qAsConst(resizableItems)) {
+                item->setWidth(itemWidth);
+                QQuickItemPrivate::get(item)->widthValid = false;
+            }
+            updatingLayout = false;
+        }
     }
+}
+
+void QQuickTabBarPrivate::itemGeometryChanged(QQuickItem *, const QRectF &, const QRectF &)
+{
+    if (!updatingLayout)
+        updateLayout();
 }
 
 QQuickTabBar::QQuickTabBar(QQuickItem *parent) :
@@ -187,6 +234,7 @@ void QQuickTabBar::itemAdded(int index, QQuickItem *item)
 {
     Q_D(QQuickTabBar);
     Q_UNUSED(index);
+    QQuickItemPrivate::get(item)->setCulled(true); // QTBUG-55129
     if (QQuickTabButton *button = qobject_cast<QQuickTabButton *>(item))
         QObjectPrivate::connect(button, &QQuickTabButton::checkedChanged, d, &QQuickTabBarPrivate::updateCurrentIndex);
     if (isComponentComplete())

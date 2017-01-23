@@ -132,15 +132,22 @@ static QRgb qquickuniversal_accent_color(QQuickUniversalStyle::Color accent)
     return colors[accent];
 }
 
-static QQuickUniversalStyle::Theme DefaultTheme = QQuickUniversalStyle::Light;
-static QRgb DefaultAccent = qquickuniversal_accent_color(QQuickUniversalStyle::Cobalt);
-static QRgb DefaultForeground = qquickuniversal_light_color(QQuickUniversalStyle::BaseHigh);
-static QRgb DefaultBackground = qquickuniversal_light_color(QQuickUniversalStyle::AltHigh);
+// If no value was inherited from a parent or explicitly set, the "global" values are used.
+// The initial, default values of the globals are hard-coded here, but the environment
+// variables and .conf file override them if specified.
+static QQuickUniversalStyle::Theme GlobalTheme = QQuickUniversalStyle::Light;
+static QRgb GlobalAccent = qquickuniversal_accent_color(QQuickUniversalStyle::Cobalt);
+static QRgb GlobalForeground = qquickuniversal_light_color(QQuickUniversalStyle::BaseHigh);
+static QRgb GlobalBackground = qquickuniversal_light_color(QQuickUniversalStyle::AltHigh);
+// These represent whether a global foreground/background was set.
+// Each style's m_hasForeground/m_hasBackground are initialized to these values.
+static bool HasGlobalForeground = false;
+static bool HasGlobalBackground = false;
 
 QQuickUniversalStyle::QQuickUniversalStyle(QObject *parent) : QQuickStyleAttached(parent),
     m_explicitTheme(false), m_explicitAccent(false), m_explicitForeground(false), m_explicitBackground(false),
-    m_hasForeground(false), m_hasBackground(false), m_theme(DefaultTheme),
-    m_accent(DefaultAccent), m_foreground(DefaultForeground), m_background(DefaultBackground)
+    m_hasForeground(HasGlobalForeground), m_hasBackground(HasGlobalBackground), m_theme(GlobalTheme),
+    m_accent(GlobalAccent), m_foreground(GlobalForeground), m_background(GlobalBackground)
 {
     init();
 }
@@ -199,7 +206,7 @@ void QQuickUniversalStyle::resetTheme()
 
     m_explicitTheme = false;
     QQuickUniversalStyle *universal = qobject_cast<QQuickUniversalStyle *>(parentStyle());
-    inheritTheme(universal ? universal->theme() : DefaultTheme);
+    inheritTheme(universal ? universal->theme() : GlobalTheme);
 }
 
 QVariant QQuickUniversalStyle::accent() const
@@ -249,7 +256,7 @@ void QQuickUniversalStyle::resetAccent()
 
     m_explicitAccent = false;
     QQuickUniversalStyle *universal = qobject_cast<QQuickUniversalStyle *>(parentStyle());
-    inheritAccent(universal ? universal->m_accent : DefaultAccent);
+    inheritAccent(universal ? universal->m_accent : GlobalAccent);
 }
 
 QVariant QQuickUniversalStyle::foreground() const
@@ -304,7 +311,7 @@ void QQuickUniversalStyle::resetForeground()
     m_hasForeground = false;
     m_explicitForeground = false;
     QQuickUniversalStyle *universal = qobject_cast<QQuickUniversalStyle *>(parentStyle());
-    inheritForeground(universal ? universal->m_foreground : DefaultForeground, universal ? universal->m_hasForeground : false);
+    inheritForeground(universal ? universal->m_foreground : GlobalForeground, universal ? universal->m_hasForeground : false);
 }
 
 QVariant QQuickUniversalStyle::background() const
@@ -359,7 +366,7 @@ void QQuickUniversalStyle::resetBackground()
     m_hasBackground = false;
     m_explicitBackground = false;
     QQuickUniversalStyle *universal = qobject_cast<QQuickUniversalStyle *>(parentStyle());
-    inheritBackground(universal ? universal->m_background : DefaultBackground, universal ? universal->m_hasBackground : false);
+    inheritBackground(universal ? universal->m_background : GlobalBackground, universal ? universal->m_hasBackground : false);
 }
 
 QColor QQuickUniversalStyle::color(Color color) const
@@ -521,26 +528,26 @@ static QByteArray resolveSetting(const QByteArray &env, const QSharedPointer<QSe
 
 void QQuickUniversalStyle::init()
 {
-    static bool defaultsInitialized = false;
-    if (!defaultsInitialized) {
+    static bool globalsInitialized = false;
+    if (!globalsInitialized) {
         QSharedPointer<QSettings> settings = QQuickStyleAttached::settings(QStringLiteral("Universal"));
 
         bool ok = false;
         QByteArray themeValue = resolveSetting("QT_QUICK_CONTROLS_UNIVERSAL_THEME", settings, QStringLiteral("Theme"));
         Theme themeEnum = toEnumValue<Theme>(themeValue, &ok);
         if (ok)
-            DefaultTheme = m_theme = themeEnum;
+            GlobalTheme = m_theme = themeEnum;
         else if (!themeValue.isEmpty())
             qWarning().nospace().noquote() << "Universal: unknown theme value: " << themeValue;
 
         QByteArray accentValue = resolveSetting("QT_QUICK_CONTROLS_UNIVERSAL_ACCENT", settings, QStringLiteral("Accent"));
         Color accentEnum = toEnumValue<Color>(accentValue, &ok);
         if (ok) {
-            DefaultAccent = m_accent = qquickuniversal_accent_color(accentEnum);
+            GlobalAccent = m_accent = qquickuniversal_accent_color(accentEnum);
         } else if (!accentValue.isEmpty()) {
             QColor color(accentValue.constData());
             if (color.isValid())
-                DefaultAccent = m_accent = color.rgba();
+                GlobalAccent = m_accent = color.rgba();
             else
                 qWarning().nospace().noquote() << "Universal: unknown accent value: " << accentValue;
         }
@@ -548,28 +555,34 @@ void QQuickUniversalStyle::init()
         QByteArray foregroundValue = resolveSetting("QT_QUICK_CONTROLS_UNIVERSAL_FOREGROUND", settings, QStringLiteral("Foreground"));
         Color foregroundEnum = toEnumValue<Color>(foregroundValue, &ok);
         if (ok) {
-            DefaultForeground = m_foreground = qquickuniversal_accent_color(foregroundEnum);
+            GlobalForeground = m_foreground = qquickuniversal_accent_color(foregroundEnum);
+            HasGlobalForeground = m_hasForeground = true;
         } else if (!foregroundValue.isEmpty()) {
             QColor color(foregroundValue.constData());
-            if (color.isValid())
-                DefaultForeground = m_foreground = color.rgba();
-            else
+            if (color.isValid()) {
+                GlobalForeground = m_foreground = color.rgba();
+                HasGlobalForeground = m_hasForeground = true;
+            } else {
                 qWarning().nospace().noquote() << "Universal: unknown foreground value: " << foregroundValue;
+            }
         }
 
         QByteArray backgroundValue = resolveSetting("QT_QUICK_CONTROLS_UNIVERSAL_BACKGROUND", settings, QStringLiteral("Background"));
         Color backgroundEnum = toEnumValue<Color>(backgroundValue, &ok);
         if (ok) {
-            DefaultBackground = m_background = qquickuniversal_accent_color(backgroundEnum);
+            GlobalBackground = m_background = qquickuniversal_accent_color(backgroundEnum);
+            HasGlobalBackground = m_hasBackground = true;
         } else if (!backgroundValue.isEmpty()) {
             QColor color(backgroundValue.constData());
-            if (color.isValid())
-                DefaultBackground = m_background = color.rgba();
-            else
+            if (color.isValid()) {
+                GlobalBackground = m_background = color.rgba();
+                HasGlobalBackground = m_hasBackground = true;
+            } else {
                 qWarning().nospace().noquote() << "Universal: unknown background value: " << backgroundValue;
+            }
         }
 
-        defaultsInitialized = true;
+        globalsInitialized = true;
     }
 
     QQuickStyleAttached::init(); // TODO: lazy init?

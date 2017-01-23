@@ -76,11 +76,6 @@ protected:
     void finished() override;
 
 private:
-    enum TransitionState {
-        Off, Enter, Exit
-    };
-
-    TransitionState state;
     QQuickPopupPrivate *popup;
 };
 
@@ -133,10 +128,9 @@ public:
     void setParentItem(QQuickItem *parent);
 
 protected:
-    void itemGeometryChanged(QQuickItem *, const QRectF &, const QRectF &);
-    void itemParentChanged(QQuickItem *, QQuickItem *parent);
-    void itemChildRemoved(QQuickItem *, QQuickItem *child);
-    void itemDestroyed(QQuickItem *item);
+    void itemGeometryChanged(QQuickItem *, const QRectF &, const QRectF &) override;
+    void itemParentChanged(QQuickItem *, QQuickItem *parent) override;
+    void itemChildRemoved(QQuickItem *, QQuickItem *child) override;
 
 private:
     void removeAncestorListeners(QQuickItem *item);
@@ -148,12 +142,13 @@ private:
     QQuickPopupPrivate *m_popup;
 };
 
-class QQuickPopupPrivate : public QObjectPrivate
+class Q_AUTOTEST_EXPORT QQuickPopupPrivate : public QObjectPrivate, public QQuickItemChangeListener
 {
     Q_DECLARE_PUBLIC(QQuickPopup)
 
 public:
     QQuickPopupPrivate();
+    ~QQuickPopupPrivate();
 
     static QQuickPopupPrivate *get(QQuickPopup *popup)
     {
@@ -163,11 +158,12 @@ public:
     void init();
     bool tryClose(QQuickItem *item, QMouseEvent *event);
     virtual void reposition();
+    virtual void resizeOverlay();
 
-    virtual void prepareEnterTransition(bool notify = true);
-    virtual void prepareExitTransition();
+    virtual bool prepareEnterTransition();
+    virtual bool prepareExitTransition();
     virtual void finalizeEnterTransition();
-    virtual void finalizeExitTransition(bool hide = true);
+    virtual void finalizeExitTransition();
 
     QMarginsF getMargins() const;
 
@@ -177,6 +173,11 @@ public:
     void setBottomMargin(qreal value, bool reset = false);
 
     void setWindow(QQuickWindow *window);
+    void itemDestroyed(QQuickItem *item) override;
+
+    enum TransitionState {
+        NoTransition, EnterTransition, ExitTransition
+    };
 
     bool focus;
     bool modal;
@@ -184,12 +185,18 @@ public:
     bool hasDim;
     bool visible;
     bool complete;
+    bool hasWidth;
+    bool hasHeight;
     bool hasTopMargin;
     bool hasLeftMargin;
     bool hasRightMargin;
     bool hasBottomMargin;
     bool allowVerticalFlip;
     bool allowHorizontalFlip;
+    bool allowVerticalMove;
+    bool allowHorizontalMove;
+    bool allowVerticalResize;
+    bool allowHorizontalResize;
     bool hadActiveFocusBeforeExitTransition;
     qreal x;
     qreal y;
@@ -202,6 +209,7 @@ public:
     qreal bottomMargin;
     qreal contentWidth;
     qreal contentHeight;
+    TransitionState transitionState;
     QQuickPopup::ClosePolicy closePolicy;
     QQuickItem *parentItem;
     QQuickItem *dimmer;

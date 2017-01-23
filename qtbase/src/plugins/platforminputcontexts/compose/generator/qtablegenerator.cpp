@@ -112,15 +112,15 @@ static QByteArray localHostName()
 */
 static QComposeCacheFileHeader readFileMetadata(const QString &path)
 {
-    QComposeCacheFileHeader info;
-    info.reserved = 0;
-    info.fileSize = 0;
+    quint64 fileSize = 0;
+    qint64 lastModified = 0;
     const QByteArray pathBytes = QFile::encodeName(path);
     QT_STATBUF st;
-    if (QT_STAT(pathBytes.data(), &st) != 0)
-        return info;
-    info.lastModified = st.st_mtime;
-    info.fileSize = st.st_size;
+    if (QT_STAT(pathBytes.data(), &st) == 0) {
+        lastModified = st.st_mtime;
+        fileSize = st.st_size;
+    }
+    QComposeCacheFileHeader info = { 0, 0, fileSize, lastModified };
     return info;
 }
 
@@ -278,7 +278,7 @@ QString TableGenerator::findComposeFile()
 
     // check if user’s home directory has a file named .XCompose
     if (cleanState()) {
-        QString path = qgetenv("HOME") + QStringLiteral("/.XCompose");
+        QString path = qgetenv("HOME") + QLatin1String("/.XCompose");
         if (QFile::exists(path))
             return path;
     }

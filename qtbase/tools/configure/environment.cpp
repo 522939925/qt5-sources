@@ -36,6 +36,7 @@
 #include <qfile.h>
 #include <qfileinfo.h>
 #include <qstandardpaths.h>
+#include <qtemporaryfile.h>
 
 #include <process.h>
 #include <errno.h>
@@ -144,6 +145,29 @@ QString Environment::gccVersion()
         cout << "Could not get mingw version" << returnValue << qPrintable(version);
         version.resize(0);
     }
+    return version;
+}
+
+QString Environment::msvcVersion()
+{
+    int returnValue = 0;
+    QString tempSourceName;
+    {   // QTemporaryFile needs to go out of scope, otherwise cl.exe refuses to open it.
+        QTemporaryFile tempSource(QDir::tempPath() + QLatin1String("/XXXXXX.cpp"));
+        tempSource.setAutoRemove(false);
+        if (!tempSource.open())
+            return QString();
+        tempSource.write("_MSC_FULL_VER\n");
+        tempSourceName = tempSource.fileName();
+    }
+    QString version = execute(QLatin1String("cl /nologo /EP \"")
+                              + QDir::toNativeSeparators(tempSourceName) + QLatin1Char('"'),
+                              &returnValue).trimmed();
+    QFile::remove(tempSourceName);
+    if (returnValue || version.size() < 9 || !version.at(0).isDigit())
+        return QString();
+    version.insert(4, QLatin1Char('.'));
+    version.insert(2, QLatin1Char('.'));
     return version;
 }
 

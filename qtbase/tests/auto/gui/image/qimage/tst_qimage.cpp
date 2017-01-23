@@ -94,6 +94,8 @@ private slots:
     void setPixel_data();
     void setPixel();
 
+    void defaultColorTable_data();
+    void defaultColorTable();
     void setColorCount();
     void setColor();
 
@@ -181,7 +183,8 @@ private slots:
     void exifOrientation();
 
     void exif_QTBUG45865();
-    void exif_invalid_data_QTBUG46870();
+    void exifInvalidData_data();
+    void exifInvalidData();
 
     void cleanupFunctions();
 
@@ -1450,6 +1453,38 @@ void tst_QImage::convertToFormatPreserveText()
     QCOMPARE(imgResult2.textKeys(), listResult);
 }
 
+void tst_QImage::defaultColorTable_data()
+{
+    QTest::addColumn<QImage::Format>("format");
+    QTest::addColumn<int>("createdDataCount");
+    QTest::addColumn<int>("externalDataCount");
+
+    // For historical reasons, internally created mono images get a default colormap.
+    // Externally created and Indexed8 images do not.
+    QTest::newRow("Mono") << QImage::Format_Mono << 2 << 0;
+    QTest::newRow("MonoLSB") << QImage::Format_MonoLSB << 2 << 0;
+    QTest::newRow("Indexed8") << QImage::Format_Indexed8 << 0 << 0;
+    QTest::newRow("ARGB32_PM") << QImage::Format_A2BGR30_Premultiplied << 0 << 0;
+}
+
+void tst_QImage::defaultColorTable()
+{
+    QFETCH(QImage::Format, format);
+    QFETCH(int, createdDataCount);
+    QFETCH(int, externalDataCount);
+
+    QImage img1(1, 1, format);
+    QCOMPARE(img1.colorCount(), createdDataCount);
+    QCOMPARE(img1.colorTable().size(), createdDataCount);
+
+    quint32 buf;
+    QImage img2(reinterpret_cast<uchar *>(&buf), 1, 1, format);
+    QCOMPARE(img2.colorCount(), externalDataCount);
+
+    QImage nullImg(0, 0, format);
+    QCOMPARE(nullImg.colorCount(), 0);
+}
+
 void tst_QImage::setColorCount()
 {
     QImage img(0, 0, QImage::Format_Indexed8);
@@ -2493,6 +2528,35 @@ void tst_QImage::inplaceRgbSwapped()
     }
 
     QCOMPARE(imageSwapped.constScanLine(0), orginalPtr);
+
+    for (int rw = 0; rw <= 1; rw++) {
+        // Test attempted inplace conversion of images created on existing buffer
+        uchar *volatileData = 0;
+        QImage orig = imageSwapped;
+        QImage dataSwapped;
+        {
+            QVERIFY(!orig.isNull());
+            volatileData = new uchar[orig.byteCount()];
+            memcpy(volatileData, orig.constBits(), orig.byteCount());
+
+            QImage dataImage;
+            if (rw)
+                dataImage = QImage(volatileData, orig.width(), orig.height(), orig.format());
+            else
+                dataImage = QImage((const uchar *)volatileData, orig.width(), orig.height(), orig.format());
+
+            if (orig.colorCount())
+                dataImage.setColorTable(orig.colorTable());
+
+            dataSwapped = std::move(dataImage).rgbSwapped();
+            QVERIFY(!dataSwapped.isNull());
+            delete[] volatileData;
+        }
+
+        QVERIFY2(dataSwapped.constBits() != volatileData, rw ? "non-const" : "const");
+        QCOMPARE(dataSwapped, orig.rgbSwapped());
+    }
+
 #endif
 }
 
@@ -2575,6 +2639,35 @@ void tst_QImage::inplaceMirrored()
         }
     }
     QCOMPARE(imageMirrored.constScanLine(0), originalPtr);
+
+    for (int rw = 0; rw <= 1; rw++) {
+        // Test attempted inplace conversion of images created on existing buffer
+        uchar *volatileData = 0;
+        QImage orig = imageMirrored;
+        QImage dataSwapped;
+        {
+            QVERIFY(!orig.isNull());
+            volatileData = new uchar[orig.byteCount()];
+            memcpy(volatileData, orig.constBits(), orig.byteCount());
+
+            QImage dataImage;
+            if (rw)
+                dataImage = QImage(volatileData, orig.width(), orig.height(), orig.format());
+            else
+                dataImage = QImage((const uchar *)volatileData, orig.width(), orig.height(), orig.format());
+
+            if (orig.colorCount())
+                dataImage.setColorTable(orig.colorTable());
+
+            dataSwapped = std::move(dataImage).mirrored(swap_horizontal, swap_vertical);
+            QVERIFY(!dataSwapped.isNull());
+            delete[] volatileData;
+        }
+
+        QVERIFY2(dataSwapped.constBits() != volatileData, rw ? "non-const" : "const");
+        QCOMPARE(dataSwapped, orig.mirrored(swap_horizontal, swap_vertical));
+    }
+
 #endif
 }
 
@@ -2727,16 +2820,24 @@ void tst_QImage::inplaceRgbConversion()
         static const quint32 readOnlyData[] = { 0xff0102ffU, 0xff0506ffU, 0xff0910ffU, 0xff1314ffU };
         quint32 readWriteData[] = { 0xff0102ffU, 0xff0506ffU, 0xff0910ffU, 0xff1314ffU };
 
-        QImage roImage((const uchar *)readOnlyData, 2, 2, format);
-        QImage roInplaceConverted = std::move(roImage).convertToFormat(dest_format);
+        QImage roInplaceConverted;
+        QImage rwInplaceConverted;
 
-        QImage rwImage((uchar *)readWriteData, 2, 2, format);
-        QImage rwInplaceConverted = std::move(rwImage).convertToFormat(dest_format);
+        {
+            QImage roImage((const uchar *)readOnlyData, 2, 2, format);
+            roInplaceConverted = std::move(roImage).convertToFormat(dest_format);
+
+            QImage rwImage((uchar *)readWriteData, 2, 2, format);
+            rwInplaceConverted = std::move(rwImage).convertToFormat(dest_format);
+        }
 
         QImage roImage2((const uchar *)readOnlyData, 2, 2, format);
         QImage normalConverted = roImage2.convertToFormat(dest_format);
 
+        QVERIFY(roInplaceConverted.constBits() != (const uchar *)readOnlyData);
         QCOMPARE(normalConverted, roInplaceConverted);
+
+        QVERIFY(rwInplaceConverted.constBits() != (const uchar *)readWriteData);
         QCOMPARE(normalConverted, rwInplaceConverted);
     }
 #endif
@@ -2928,10 +3029,20 @@ void tst_QImage::exif_QTBUG45865()
     QCOMPARE(image.size(), QSize(5, 8));
 }
 
-void tst_QImage::exif_invalid_data_QTBUG46870()
+void tst_QImage::exifInvalidData_data()
+{
+    QTest::addColumn<bool>("$never used");
+    QTest::newRow("QTBUG-46870");
+    QTest::newRow("back_pointers");
+    QTest::newRow("past_end");
+    QTest::newRow("too_many_ifds");
+    QTest::newRow("too_many_tags");
+}
+
+void tst_QImage::exifInvalidData()
 {
     QImage image;
-    QVERIFY(image.load(m_prefix + "jpeg_exif_invalid_data_QTBUG-46870.jpg"));
+    QVERIFY(image.load(m_prefix + "jpeg_exif_invalid_data_" + QTest::currentDataTag() + ".jpg"));
     QVERIFY(!image.isNull());
 }
 
@@ -3116,8 +3227,8 @@ void tst_QImage::pixel()
         QImage monolsb(&a, 1, 1, QImage::Format_MonoLSB);
         QImage indexed(&a, 1, 1, QImage::Format_Indexed8);
 
-        QCOMPARE(QColor(mono.pixel(0, 0)), QColor(Qt::black));
-        QCOMPARE(QColor(monolsb.pixel(0, 0)), QColor(Qt::black));
+        mono.pixel(0, 0); // Don't crash
+        monolsb.pixel(0, 0); // Don't crash
         indexed.pixel(0, 0); // Don't crash
     }
 }

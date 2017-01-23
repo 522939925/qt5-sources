@@ -146,6 +146,18 @@ static QList<QQuickStyleAttached *> findChildStyles(const QMetaObject *type, QOb
     return children;
 }
 
+static QString resolveConfigFile()
+{
+    QString filePath = QFile::decodeName(qgetenv("QT_QUICK_CONTROLS_CONF"));
+    if (!QFile::exists(filePath)) {
+        if (!filePath.isEmpty())
+            qWarning("QT_QUICK_CONTROLS_CONF=%s: No such file", qPrintable(filePath));
+
+        filePath = QStringLiteral(":/qtquickcontrols2.conf");
+    }
+    return filePath;
+}
+
 QQuickStyleAttached::QQuickStyleAttached(QObject *parent) : QObject(parent)
 {
     QQuickItem *item = qobject_cast<QQuickItem *>(parent);
@@ -175,7 +187,7 @@ QQuickStyleAttached::~QQuickStyleAttached()
 QSharedPointer<QSettings> QQuickStyleAttached::settings(const QString &group)
 {
 #ifndef QT_NO_SETTINGS
-    const QString filePath = QStringLiteral(":/qtquickcontrols2.conf");
+    static const QString filePath = resolveConfigFile();
     if (QFile::exists(filePath)) {
         QFileSelector selector;
         QSettings *settings = new QSettings(selector.select(filePath), QSettings::IniFormat);
@@ -229,10 +241,13 @@ void QQuickStyleAttached::parentStyleChange(QQuickStyleAttached *newParent, QQui
 
 void QQuickStyleAttached::itemWindowChanged(QQuickWindow *window)
 {
-    Q_UNUSED(window);
+    QQuickStyleAttached *parentStyle = nullptr;
     QQuickItem *item = qobject_cast<QQuickItem *>(sender());
     if (item)
-        setParentStyle(findParentStyle(metaObject(), item));
+        parentStyle = findParentStyle(metaObject(), item);
+    if (!parentStyle)
+        parentStyle = attachedStyle(metaObject(), window);
+    setParentStyle(parentStyle);
 }
 
 void QQuickStyleAttached::itemParentChanged(QQuickItem *item, QQuickItem *parent)

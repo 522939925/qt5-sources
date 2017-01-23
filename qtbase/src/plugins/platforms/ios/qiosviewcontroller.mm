@@ -228,6 +228,10 @@
 
 @implementation QIOSViewController
 
+@synthesize prefersStatusBarHidden;
+@synthesize preferredStatusBarUpdateAnimation;
+@synthesize preferredStatusBarStyle;
+
 - (id)initWithQIOSScreen:(QIOSScreen *)screen
 {
     if (self = [self init]) {
@@ -330,17 +334,16 @@
 
 - (void)willRotateToInterfaceOrientation:(UIInterfaceOrientation)orientation duration:(NSTimeInterval)duration
 {
-    Q_UNUSED(orientation);
-    Q_UNUSED(duration);
-
     self.changingOrientation = YES;
+
+    [super willRotateToInterfaceOrientation:orientation duration:duration];
 }
 
 - (void)didRotateFromInterfaceOrientation:(UIInterfaceOrientation)orientation
 {
-    Q_UNUSED(orientation);
-
     self.changingOrientation = NO;
+
+    [super didRotateFromInterfaceOrientation:orientation];
 }
 
 - (void)willChangeStatusBarFrame:(NSNotification*)notification

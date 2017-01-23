@@ -37,10 +37,10 @@
     \section1 Attached Properties
 
     \list
-        \li \l {accent-attached-prop}{\b accent} : color
-        \li \l {background-attached-prop}{\b background} : color
-        \li \l {foreground-attached-prop}{\b foreground} : color
-        \li \l {theme-attached-prop}{\b theme} : enumeration
+        \li \l {universal-accent-attached-prop}{\b accent} : color
+        \li \l {universal-background-attached-prop}{\b background} : color
+        \li \l {universal-foreground-attached-prop}{\b foreground} : color
+        \li \l {universal-theme-attached-prop}{\b theme} : enumeration
     \endlist
 
     \section1 Attached Methods
@@ -60,6 +60,9 @@
     \image qtquickcontrols2-universal.png
     \caption The Universal style in light and dark themes
 
+    To run an application with the Universal style, see
+    \l {Using Styles in Qt Quick Controls 2}.
+
     \note The Universal style is not a native Windows 10 style. The Universal
     style is a 100% cross-platform Qt Quick Controls 2 style implementation that
     follows the Microsoft Universal Design Guidelines. The style runs on any
@@ -69,9 +72,9 @@
 
     \section2 Customization
 
-    The Universal style allows customizing four attributes, \l {theme-attached-prop}{theme},
-    \l {accent-attached-prop}{accent}, \l {foreground-attached-prop}{foreground}, and
-    \l {background-attached-prop}{background}.
+    The Universal style allows customizing four attributes, \l {universal-theme-attached-prop}{theme},
+    \l {universal-accent-attached-prop}{accent}, \l {universal-foreground-attached-prop}{foreground}, and
+    \l {universal-background-attached-prop}{background}.
 
     \image qtquickcontrols2-universal-attributes.png
 
@@ -131,7 +134,8 @@
 
     In addition to specifying the attributes in QML, it is also possible to
     specify them via environment variables or in a \l {qtquickcontrols2-conf}
-    {configuration file}.
+    {configuration file}. Attributes specified in QML take precedence over all
+    other methods.
 
     \section3 Environment Variables
 
@@ -141,13 +145,20 @@
             \li Description
         \row
             \li \c QT_QUICK_CONTROLS_UNIVERSAL_THEME
-            \li The value can be one of the available \l {theme-attached-prop}{themes},
+            \li The value can be one of the available \l {universal-theme-attached-prop}{themes},
                 for example \c "Dark".
         \row
             \li \c QT_QUICK_CONTROLS_UNIVERSAL_ACCENT
             \li The value can be any \l {colorbasictypedocs}{color}, but it is recommended
-                to use one of the pre-defined  \l {accent-attached-prop} {accents}, for
-                example \c "Violet".
+                to use one of the \l {pre-defined Universal colors}, for example \c "Violet".
+        \row
+            \li \c QT_QUICK_CONTROLS_UNIVERSAL_FOREGROUND
+            \li The value can be any \l {colorbasictypedocs}{color}, or one of the
+                \l {pre-defined Universal colors}.
+        \row
+            \li \c QT_QUICK_CONTROLS_UNIVERSAL_BACKGROUND
+            \li The value can be any \l {colorbasictypedocs}{color}, or one of the
+                \l {pre-defined Universal colors}.
     \endtable
 
     \section2 Dependency
@@ -165,19 +176,9 @@
     style-specific tweaks can be applied without creating a hard dependency to
     a style.
 
-    \b {See also} \l {Default Style}, \l {Material Style}
+    \section2 Pre-defined Universal Colors
 
-    \section1 Attached Property Documentation
-
-    \styleproperty {Universal.accent} {color} {accent-attached-prop}
-    \target accent-attached-prop
-    This attached property holds the accent color of the theme. The property
-    can be attached to any window or item. The value is propagated to children.
-
-    Even though the accent can be any \l {colorbasictypedocs}{color}, it is
-    recommended to use one of the pre-defined accents that have been designed
-    to work well with the rest of the Universal style palette:
-
+    Available pre-defined colors:
     \value Universal.Lime \stylecolor {#A4C400} {}
     \value Universal.Green \stylecolor {#60A917} {}
     \value Universal.Emerald \stylecolor {#008A00} {}
@@ -199,10 +200,23 @@
     \value Universal.Mauve \stylecolor {#76608A} {}
     \value Universal.Taupe \stylecolor {#87794E} {}
 
+    \b {See also} \l {Default Style}, \l {Material Style}
+
+    \section1 Attached Property Documentation
+
+    \styleproperty {Universal.accent} {color} {universal-accent-attached-prop}
+    \target universal-accent-attached-prop
+    This attached property holds the accent color of the theme. The property
+    can be attached to any window or item. The value is propagated to children.
+
+    \note Even though the accent can be any \l {colorbasictypedocs}{color}, it is
+    recommended to use one of the  \l {pre-defined Universal colors} that have been
+    designed to work well with the rest of the Universal style palette.
+
     \endstyleproperty
 
-    \styleproperty {Universal.background} {color} {background-attached-prop}
-    \target background-attached-prop
+    \styleproperty {Universal.background} {color} {universal-background-attached-prop}
+    \target universal-background-attached-prop
     This attached property holds the background color of the theme. The property
     can be attached to any window or item. The value is propagated to children.
 
@@ -210,15 +224,15 @@
 
     \endstyleproperty
 
-    \styleproperty {Universal.foreground} {color} {foreground-attached-prop}
-    \target foreground-attached-prop
+    \styleproperty {Universal.foreground} {color} {universal-foreground-attached-prop}
+    \target universal-foreground-attached-prop
     This attached property holds the foreground color of the theme. The property
     can be attached to any window or item. The value is propagated to children.
 
     The default value is theme-specific (light or dark).
 
-    \styleproperty {Universal.theme} {enumeration} {theme-attached-prop}
-    \target theme-attached-prop
+    \styleproperty {Universal.theme} {enumeration} {universal-theme-attached-prop}
+    \target universal-theme-attached-prop
     This attached property holds whether the theme is light or dark. The property
     can be attached to any window or item. The value is propagated to children.
 
@@ -232,8 +246,8 @@
 
     \stylemethod {color} {color} {enumeration} {predefined} {color-attached-method}
     \target color-attached-method
-    This attached method returns the color value of the specified \l {pre-defined colors}
-    {pre-defined color}.
+    This attached method returns the effective color value of the specified
+    \l {pre-defined Universal colors}{pre-defined Universal color}.
 
     \qml
     import QtQuick 2.0

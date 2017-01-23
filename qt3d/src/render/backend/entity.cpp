@@ -50,7 +50,6 @@
 #include <Qt3DRender/qgeometryrenderer.h>
 #include <Qt3DRender/qobjectpicker.h>
 #include <Qt3DRender/qcomputecommand.h>
-#include <Qt3DRender/private/qboundingvolumedebug_p.h>
 #include <Qt3DRender/private/geometryrenderermanager_p.h>
 
 #include <Qt3DRender/qcameralens.h>
@@ -92,7 +91,7 @@ void Entity::cleanup()
         Entity *parentEntity = parent();
         if (parentEntity != nullptr)
             parentEntity->removeChildHandle(m_handle);
-        for (int i = 0; i < m_childrenHandles.size(); i++)
+        for (int i = 0; i < m_childrenHandles.size(); ++i)
             m_nodeManagers->renderNodesManager()->release(m_childrenHandles[i]);
         // We need to release using peerId otherwise the handle will be cleared
         // but would still remain in the Id to Handle table
@@ -112,6 +111,7 @@ void Entity::cleanup()
     m_objectPickerComponent = QNodeId();
     m_boundingVolumeDebugComponent = QNodeId();
     m_computeComponent = QNodeId();
+    m_childrenHandles.clear();
     m_layerComponents.clear();
     m_shaderDataComponents.clear();
     m_lightComponents.clear();
@@ -166,6 +166,7 @@ void Entity::initializeFromPeer(const QNodeCreatedChangeBasePtr &change)
     m_geometryRendererComponent = QNodeId();
     m_objectPickerComponent = QNodeId();
     m_boundingVolumeDebugComponent = QNodeId();
+    m_computeComponent = QNodeId();
     m_layerComponents.clear();
     m_shaderDataComponents.clear();
     m_lightComponents.clear();
@@ -246,14 +247,6 @@ void Entity::appendChildHandle(HEntity childHandle)
         Entity *child = m_nodeManagers->renderNodesManager()->data(childHandle);
         if (child != nullptr)
             child->m_parentHandle = m_handle;
-    }
-}
-
-void Entity::removeChildHandle(HEntity childHandle)
-{
-    // TO DO : Check if a QList here wouldn't be more performant
-    if (m_childrenHandles.contains(childHandle)) {
-        m_childrenHandles.removeAt(m_childrenHandles.indexOf(childHandle));
     }
 }
 
@@ -408,9 +401,9 @@ HObjectPicker Entity::componentHandle<ObjectPicker>() const
 }
 
 template<>
-QList<HLayer> Entity::componentsHandle<Layer>() const
+QVector<HLayer> Entity::componentsHandle<Layer>() const
 {
-    QList<HLayer> layerHandles;
+    QVector<HLayer> layerHandles;
     layerHandles.reserve(m_layerComponents.size());
     for (QNodeId id : m_layerComponents)
         layerHandles.append(m_nodeManagers->layerManager()->lookupHandle(id));
@@ -418,9 +411,9 @@ QList<HLayer> Entity::componentsHandle<Layer>() const
 }
 
 template<>
-QList<HShaderData> Entity::componentsHandle<ShaderData>() const
+QVector<HShaderData> Entity::componentsHandle<ShaderData>() const
 {
-    QList<HShaderData> shaderDataHandles;
+    QVector<HShaderData> shaderDataHandles;
     shaderDataHandles.reserve(m_shaderDataComponents.size());
     for (QNodeId id : m_shaderDataComponents)
         shaderDataHandles.append(m_nodeManagers->shaderDataManager()->lookupHandle(id));
@@ -434,9 +427,9 @@ QList<HShaderData> Entity::componentsHandle<ShaderData>() const
 //}
 
 template<>
-QList<HLight> Entity::componentsHandle<Light>() const
+QVector<HLight> Entity::componentsHandle<Light>() const
 {
-    QList<HLight> lightHandles;
+    QVector<HLight> lightHandles;
     lightHandles.reserve(m_lightComponents.size());
     for (QNodeId id : m_lightComponents)
         lightHandles.append(m_nodeManagers->lightManager()->lookupHandle(id));
@@ -482,9 +475,9 @@ ObjectPicker *Entity::renderComponent<ObjectPicker>() const
 }
 
 template<>
-QList<Layer *> Entity::renderComponents<Layer>() const
+QVector<Layer *> Entity::renderComponents<Layer>() const
 {
-    QList<Layer *> layers;
+    QVector<Layer *> layers;
     layers.reserve(m_layerComponents.size());
     for (QNodeId id : m_layerComponents)
         layers.append(m_nodeManagers->layerManager()->lookupResource(id));
@@ -492,9 +485,9 @@ QList<Layer *> Entity::renderComponents<Layer>() const
 }
 
 template<>
-QList<ShaderData *> Entity::renderComponents<ShaderData>() const
+QVector<ShaderData *> Entity::renderComponents<ShaderData>() const
 {
-    QList<ShaderData *> shaderDatas;
+    QVector<ShaderData *> shaderDatas;
     shaderDatas.reserve(m_shaderDataComponents.size());
     for (QNodeId id : m_shaderDataComponents)
         shaderDatas.append(m_nodeManagers->shaderDataManager()->lookupResource(id));
@@ -502,9 +495,9 @@ QList<ShaderData *> Entity::renderComponents<ShaderData>() const
 }
 
 template<>
-QList<Light *> Entity::renderComponents<Light>() const
+QVector<Light *> Entity::renderComponents<Light>() const
 {
-    QList<Light *> lights;
+    QVector<Light *> lights;
     lights.reserve(m_lightComponents.size());
     for (QNodeId id : m_lightComponents)
         lights.append(m_nodeManagers->lightManager()->lookupResource(id));

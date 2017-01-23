@@ -95,7 +95,7 @@ QPlatformDialogHelper *QDialogPrivate::platformHelper() const
 {
     // Delayed creation of the platform, ensuring that
     // that qobject_cast<> on the dialog works in the plugin.
-    if (!m_platformHelperCreated) {
+    if (!m_platformHelperCreated && canBeNativeDialog()) {
         m_platformHelperCreated = true;
         QDialogPrivate *ncThis = const_cast<QDialogPrivate *>(this);
         QDialog *dialog = ncThis->q_func();
@@ -870,6 +870,14 @@ void QDialog::adjustPosition(QWidget* w)
         p.setY(desk.y() + desk.height() - height() - extrah);
     if (p.y() < desk.y())
         p.setY(desk.y());
+
+    // QTBUG-52735: Manually set the correct target screen since scaling in a
+    // subsequent call to QWindow::resize() may otherwise use the wrong factor
+    // if the screen changed notification is still in an event queue.
+    if (scrn >= 0) {
+        if (QWindow *window = windowHandle())
+            window->setScreen(QGuiApplication::screens().at(scrn));
+    }
 
     move(p);
 }

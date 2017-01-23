@@ -88,7 +88,7 @@ public:
  * \qmltype WaylandClient
  * \inqmlmodule QtWayland.Compositor
  * \preliminary
- * \brief A client connecting to the WaylandCompositor.
+ * \brief Represents a client connecting to the WaylandCompositor.
  *
  * This type represents a client connecting to the compositor using the Wayland protocol.
  * It corresponds to the Wayland interface wl_client.
@@ -98,7 +98,7 @@ public:
  * \class QWaylandClient
  * \inmodule QtWaylandCompositor
  * \preliminary
- * \brief A client connecting to the QWaylandCompositor.
+ * \brief The QWaylandClient class represents a client connecting to the QWaylandCompositor.
  *
  * This class corresponds to a client connecting to the compositor using the Wayland protocol.
  * It corresponds to the Wayland interface wl_client.
@@ -134,8 +134,8 @@ QWaylandClient::~QWaylandClient()
 }
 
 /*!
- * Returns the QWaylandClient corresponding to the Wayland client \a wl_client and \a compositor.
- * If a QWaylandClient has not already been created for \a client, it is
+ * Returns the QWaylandClient corresponding to the Wayland client \a wlClient and \a compositor.
+ * If a QWaylandClient has not already been created for a client, it is
  * created and returned.
  */
 QWaylandClient *QWaylandClient::fromWlClient(QWaylandCompositor *compositor, wl_client *wlClient)
@@ -181,6 +181,7 @@ wl_client *QWaylandClient::client() const
 
 /*!
  * \property QWaylandClient::userId
+ * \readonly
  *
  * This property holds the user id of this QWaylandClient.
  */
@@ -193,6 +194,7 @@ qint64 QWaylandClient::userId() const
 
 /*!
  * \qmlproperty int QtWaylandCompositor::WaylandClient::groupId
+ * \readonly
  *
  * This property holds the group id of this WaylandClient.
  */
@@ -211,6 +213,7 @@ qint64 QWaylandClient::groupId() const
 
 /*!
  * \qmlproperty int QtWaylandCompositor::WaylandClient::processId
+ * \readonly
  *
  * This property holds the process id of this WaylandClient.
  */

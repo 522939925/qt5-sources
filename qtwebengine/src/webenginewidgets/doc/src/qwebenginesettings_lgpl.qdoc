@@ -88,11 +88,13 @@
     This enum type specifies settings for web pages:
 
     \value  AutoLoadImages
-            Automatically loads images on web pages. Enabled by default.
+            Automatically dowloads images for web pages. When this setting is
+            disabled, images are loaded from the cache. Enabled by default.
     \value  JavascriptEnabled
             Enables the running of JavaScript programs. Enabled by default.
     \value  JavascriptCanOpenWindows
-            Allows JavaScript programs to open new windows. Enabled by default.
+            Allows JavaScript programs to open popup windows without user
+            interaction. Enabled by default.
     \value  JavascriptCanAccessClipboard
             Allows JavaScript programs to read from and write to the clipboard. Disabled by
             default.
@@ -149,12 +151,12 @@
 
 /*!
     \fn void QWebEngineSettings::setFontSize(FontSize type, int size)
-    Sets the font size for \a type to \a size.
+    Sets the font size for \a type to \a size in pixels.
 */
 
 /*!
     \fn int QWebEngineSettings::fontSize(FontSize type) const
-    Returns the default font size for \a type.
+    Returns the default font size for \a type in pixels.
 */
 
 /*!

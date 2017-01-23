@@ -57,17 +57,6 @@ QT_BEGIN_NAMESPACE
     a question. Typical buttons are \e OK, \e Apply, \e Cancel, \e Close,
     \e Yes, \e No, and \e Help.
 
-    \table
-    \row \li \image qtquickcontrols2-button-normal.png
-         \li A button in its normal state.
-    \row \li \image qtquickcontrols2-button-pressed.png
-         \li A button that is pressed.
-    \row \li \image qtquickcontrols2-button-focused.png
-         \li A button that has active focus.
-    \row \li \image qtquickcontrols2-button-disabled.png
-         \li A button that is disabled.
-    \endtable
-
     A button emits the signal \l {AbstractButton::}{clicked()} when it is activated by the user.
     Connect to this signal to perform the button's action. Buttons also
     provide the signals \l {AbstractButton::}{canceled()}, \l {AbstractButton::}{doubleClicked()}, \l {AbstractButton::}{pressed()},
@@ -116,6 +105,17 @@ QQuickButton::QQuickButton(QQuickItem *parent) :
     \qmlproperty bool QtQuick.Controls::Button::checkable
 
     This property holds whether the button is checkable.
+
+    A checkable button toggles between checked (on) and unchecked (off) when
+    the user clicks on it or presses the space bar while the button has active
+    focus.
+
+    Setting \l {AbstractButton::}{checked} to \c true forces this property to
+    \c true.
+
+    The default value is \c false.
+
+    \sa CheckBox, Switch
 */
 
 void QQuickButton::checkableChange()
@@ -126,8 +126,10 @@ void QQuickButton::checkableChange()
 /*!
     \qmlproperty bool QtQuick.Controls::Button::autoRepeat
 
-    This property holds whether the button repeats pressed(), released()
-    and clicked() signals while the button is pressed and held down.
+    This property holds whether the button repeats
+    \l {AbstractButton::}{pressed()}, \l {AbstractButton::}{released()}
+    and \l {AbstractButton::}{clicked()} signals while the button is pressed
+    and held down.
 
     The default value is \c false.
 */
@@ -146,6 +148,8 @@ QFont QQuickButton::defaultFont() const
     \qmlproperty bool QtQuick.Controls::Button::highlighted
 
     This property holds whether the button is highlighted.
+
+    \image qtquickcontrols2-button-highlighted.gif
 
     A button can be highlighted in order to draw the user's attention towards
     it. It has no effect on keyboard interaction.
@@ -172,6 +176,8 @@ void QQuickButton::setHighlighted(bool highlighted)
     \qmlproperty bool QtQuick.Controls::Button::flat
 
     This property holds whether the button is flat.
+
+    \image qtquickcontrols2-button-flat.gif
 
     A flat button typically does not draw a background unless it is pressed or checked.
 

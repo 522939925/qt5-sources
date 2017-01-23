@@ -372,29 +372,39 @@ QVariant QMetaObjectPublisher::invokeMethod(QObject *const object, const int met
     // construct converter objects of QVariant to QGenericArgument
     VariantArgument arguments[10];
     for (int i = 0; i < qMin(args.size(), method.parameterCount()); ++i) {
-        QVariant arg = args.at(i).toVariant();
-        if (method.parameterType(i) != QMetaType::QVariant && !arg.convert(method.parameterType(i))) {
-            qWarning() << "Could not convert argument" << args.at(i) << "to target type" << method.parameterTypes().at(i) << '.';
-        }
-        arguments[i].value = arg;
+        arguments[i].value = toVariant(args.at(i), method.parameterType(i));
     }
-
     // construct QGenericReturnArgument
     QVariant returnValue;
-    if (method.returnType() != qMetaTypeId<QVariant>() && method.returnType() != qMetaTypeId<void>()) {
-        // Only init variant with return type if its not a variant itself, which would
-        // lead to nested variants which is not what we want.
-        // Also, skip void-return types for obvious reasons (and to prevent a runtime warning inside Qt).
-        returnValue = QVariant(method.returnType(), 0);
-    }
-    QGenericReturnArgument returnArgument(method.typeName(), returnValue.data());
-
-    // now we can call the method
-    method.invoke(object, returnArgument,
+    if (method.returnType() == QMetaType::Void) {
+        // Skip return for void methods (prevents runtime warnings inside Qt), and allows
+        // QMetaMethod to invoke void-returning methods on QObjects in a different thread.
+        method.invoke(object,
                   arguments[0], arguments[1], arguments[2], arguments[3], arguments[4],
                   arguments[5], arguments[6], arguments[7], arguments[8], arguments[9]);
+    } else {
+        QGenericReturnArgument returnArgument(method.typeName(), returnValue.data());
 
+        // Only init variant with return type if its not a variant itself, which would
+        // lead to nested variants which is not what we want.
+        if (method.returnType() != QMetaType::QVariant)
+            returnValue = QVariant(method.returnType(), 0);
+        method.invoke(object, returnArgument,
+                  arguments[0], arguments[1], arguments[2], arguments[3], arguments[4],
+                  arguments[5], arguments[6], arguments[7], arguments[8], arguments[9]);
+    }
+    // now we can call the method
     return returnValue;
+}
+
+void QMetaObjectPublisher::setProperty(QObject *object, const int propertyIndex, const QJsonValue &value)
+{
+    QMetaProperty property = object->metaObject()->property(propertyIndex);
+    if (!property.isValid()) {
+        qWarning() << "Cannot set unknown property" << propertyIndex << "of object" << object;
+    } else if (!property.write(object, toVariant(value, property.userType()))) {
+        qWarning() << "Could not write value " << value << "to property" << property.name() << "of object" << object;
+    }
 }
 
 void QMetaObjectPublisher::signalEmitted(const QObject *object, const int signalIndex, const QVariantList &arguments)
@@ -449,6 +459,69 @@ void QMetaObjectPublisher::objectDestroyed(const QObject *object)
     pendingPropertyUpdates.remove(object);
 }
 
+void QMetaObjectPublisher::transportRemoved(QWebChannelAbstractTransport *transport)
+{
+    QHash<QWebChannelAbstractTransport*, QString>::iterator it = transportedWrappedObjects.find(transport);
+    // It is not allowed to modify a container while iterating over it. So save
+    // objects which should be removed and call objectDestroyed() on them later.
+    QVector<QObject*> objectsForDeletion;
+    while (it != transportedWrappedObjects.end() && it.key() == transport) {
+        if (wrappedObjects.contains(it.value())) {
+            QVector<QWebChannelAbstractTransport*> &transports = wrappedObjects[it.value()].transports;
+            transports.removeOne(transport);
+            if (transports.isEmpty())
+                objectsForDeletion.append(wrappedObjects[it.value()].object);
+        }
+
+        it++;
+    }
+
+    transportedWrappedObjects.remove(transport);
+
+    foreach (QObject *obj, objectsForDeletion)
+        objectDestroyed(obj);
+}
+
+QObject *QMetaObjectPublisher::unwrapObject(const QString &objectId) const
+{
+    if (!objectId.isEmpty()) {
+        ObjectInfo objectInfo = wrappedObjects.value(objectId);
+        if (objectInfo.object && !objectInfo.classinfo.isEmpty())
+            return objectInfo.object;
+    }
+
+    qWarning() << "No wrapped object" << objectId;
+    return Q_NULLPTR;
+}
+
+QVariant QMetaObjectPublisher::toVariant(const QJsonValue &value, int targetType) const
+{
+    if (targetType == QMetaType::QJsonValue) {
+        return QVariant::fromValue(value);
+    } else if (targetType == QMetaType::QJsonArray) {
+        if (!value.isArray())
+            qWarning() << "Cannot not convert non-array argument" << value << "to QJsonArray.";
+        return QVariant::fromValue(value.toArray());
+    } else if (targetType == QMetaType::QJsonObject) {
+        if (!value.isObject())
+            qWarning() << "Cannot not convert non-object argument" << value << "to QJsonObject.";
+        return QVariant::fromValue(value.toObject());
+    } else if (QMetaType::typeFlags(targetType) & QMetaType::PointerToQObject) {
+        QObject *unwrappedObject = unwrapObject(value.toObject()[KEY_ID].toString());
+        if (unwrappedObject == Q_NULLPTR)
+            qWarning() << "Cannot not convert non-object argument" << value << "to QObject*.";
+        return QVariant::fromValue(unwrappedObject);
+    }
+
+    // this converts QJsonObjects to QVariantMaps, which is not desired when
+    // we want to get a QJsonObject or QJsonValue (see above)
+    QVariant variant = value.toVariant();
+    if (targetType != QMetaType::QVariant && !variant.convert(targetType)) {
+        qWarning() << "Could not convert argument" << value << "to target type" << QVariant::typeToName(targetType) << '.';
+    }
+    return variant;
+}
+
 // NOTE: transport can be a nullptr
 //       in such a case, we need to ensure that the property is registered to
 //       the target transports of the parentObjectId
@@ -480,6 +553,7 @@ QJsonValue QMetaObjectPublisher::wrapResult(const QVariant &result, QWebChannelA
                     oi.transports = webChannel->d_func()->transports;
             }
             wrappedObjects.insert(id, oi);
+            transportedWrappedObjects.insert(transport, id);
 
             initializePropertyUpdates(object, classInfo);
         } else if (wrappedObjects.contains(id)) {
@@ -594,14 +668,8 @@ void QMetaObjectPublisher::handleMessage(const QJsonObject &message, QWebChannel
         } else if (type == TypeDisconnectFromSignal) {
             signalHandler.disconnectFrom(object, message.value(KEY_SIGNAL).toInt(-1));
         } else if (type == TypeSetProperty) {
-            const int propertyIdx = message.value(KEY_PROPERTY).toInt(-1);
-            QMetaProperty property = object->metaObject()->property(propertyIdx);
-            if (!property.isValid()) {
-                qWarning() << "Cannot set unknown property" << message.value(KEY_PROPERTY) << "of object" << objectName;
-            } else if (!object->metaObject()->property(propertyIdx).write(object, message.value(KEY_VALUE).toVariant())) {
-                qWarning() << "Could not write value " << message.value(KEY_VALUE)
-                           << "to property" << property.name() << "of object" << objectName;
-            }
+            setProperty(object, message.value(KEY_PROPERTY).toInt(-1),
+                        message.value(KEY_VALUE));
         }
     }
 }

@@ -46,8 +46,9 @@
 #include "PageAllocation.h"
 #include "StdLibExtras.h"
 
-#include <QTime>
+#include <QElapsedTimer>
 #include <QMap>
+#include <QScopedValueRollback>
 
 #include <iostream>
 #include <cstdlib>
@@ -433,11 +434,22 @@ void MemoryManager::sweep(bool lastSweep)
         Managed *m = (*it).as<Managed>();
         if (m->markBit())
             continue;
-        // we need to call detroyObject on qobjectwrappers now, so that they can emit the destroyed
+        // we need to call destroyObject on qobjectwrappers now, so that they can emit the destroyed
         // signal before we start sweeping the heap
         if (QObjectWrapper *qobjectWrapper = (*it).as<QObjectWrapper>())
             qobjectWrapper->destroyObject(lastSweep);
 
+        (*it) = Primitive::undefinedValue();
+    }
+
+    // onDestruction handlers may have accessed other QObject wrappers and reset their value, so ensure
+    // that they are all set to undefined.
+    for (PersistentValueStorage::Iterator it = m_weakValues->begin(); it != m_weakValues->end(); ++it) {
+        if (!(*it).isManaged())
+            continue;
+        Managed *m = (*it).as<Managed>();
+        if (m->markBit())
+            continue;
         (*it) = Primitive::undefinedValue();
     }
 
@@ -448,7 +460,7 @@ void MemoryManager::sweep(bool lastSweep)
         remainingWeakQObjectWrappers.reserve(pendingCount);
         for (int i = 0; i < pendingCount; ++i) {
             Value *v = m_pendingFreedObjectWrapperValue.at(i);
-            if (v->tag() == Value::Undefined_Type)
+            if (v->isUndefined() || v->isEmpty())
                 PersistentValueStorage::free(v);
             else
                 remainingWeakQObjectWrappers.append(v);
@@ -548,24 +560,25 @@ void MemoryManager::runGC()
         return;
     }
 
+    QScopedValueRollback<bool> gcBlocker(m_d->gcBlocked, true);
+
     if (!m_d->gcStats) {
         mark();
         sweep();
     } else {
         const size_t totalMem = getAllocatedMem();
 
-        QTime t;
+        QElapsedTimer t;
         t.start();
         mark();
-        int markTime = t.elapsed();
-        t.restart();
+        qint64 markTime = t.restart();
         const size_t usedBefore = getUsedMem();
         const size_t largeItemsBefore = getLargeItemsMem();
         int chunksBefore = m_d->heapChunks.size();
         sweep();
         const size_t usedAfter = getUsedMem();
         const size_t largeItemsAfter = getLargeItemsMem();
-        int sweepTime = t.elapsed();
+        qint64 sweepTime = t.elapsed();
 
         qDebug() << "========== GC ==========";
         qDebug() << "Marked object in" << markTime << "ms.";

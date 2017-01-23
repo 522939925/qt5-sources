@@ -355,6 +355,48 @@ TestCase {
         control.destroy()
     }
 
+    function test_resetSize() {
+        var control = popupControl.createObject(testCase, {visible: true, margins: 0})
+        verify(control)
+
+        control.width = control.implicitWidth = testCase.width + 10
+        control.height = control.implicitHeight = testCase.height + 10
+
+        compare(control.width, testCase.width + 10)
+        compare(control.height, testCase.height + 10)
+
+        control.width = undefined
+        control.height = undefined
+        compare(control.width, testCase.width)
+        compare(control.height, testCase.height)
+
+        control.destroy()
+    }
+
+    function test_negativeMargins() {
+        var control = popupControl.createObject(testCase, {implicitWidth: testCase.width, implicitHeight: testCase.height})
+        verify(control)
+
+        control.open()
+        verify(control.visible)
+
+        compare(control.x, 0)
+        compare(control.y, 0)
+
+        compare(control.margins, -1)
+        compare(control.topMargin, -1)
+        compare(control.leftMargin, -1)
+        compare(control.rightMargin, -1)
+        compare(control.bottomMargin, -1)
+
+        control.x = -10
+        control.y = -10
+        compare(control.x, 0)
+        compare(control.y, 0)
+
+        control.destroy()
+    }
+
     function test_margins() {
         var control = popupControl.createObject(testCase, {width: 100, height: 100})
         verify(control)
@@ -940,24 +982,66 @@ TestCase {
         var control = popupControl.createObject(testCase)
         verify(control)
 
-        control.width = 200
-        control.height = 200
-
         control.open()
         waitForRendering(control.contentItem)
 
-        compare(control.width, 200)
-        compare(control.height, 200)
+        // implicit size of the content
+        control.contentItem.implicitWidth = 10
+        compare(control.implicitWidth, 10 + control.leftPadding + control.rightPadding)
+        compare(control.width, control.implicitWidth)
+        compare(control.contentItem.width, control.width - control.leftPadding - control.rightPadding)
+
+        control.contentItem.implicitHeight = 20
+        compare(control.implicitHeight, 20 + control.topPadding + control.bottomPadding)
+        compare(control.height, control.implicitHeight)
+        compare(control.contentItem.height, control.height - control.topPadding - control.bottomPadding)
+
+        // implicit size of the popup
+        control.implicitWidth = 30
+        compare(control.implicitWidth, 30)
+        compare(control.width, 30)
+        compare(control.contentItem.width, control.width - control.leftPadding - control.rightPadding)
+
+        control.implicitHeight = 40
+        compare(control.implicitHeight, 40)
+        compare(control.height, 40)
+        compare(control.contentItem.height, control.height - control.topPadding - control.bottomPadding)
+
+        // set explicit size
+        control.width = 50
+        compare(control.implicitWidth, 30)
+        compare(control.width, 50)
+        compare(control.contentItem.width, control.width - control.leftPadding - control.rightPadding)
+
+        control.height = 60
+        compare(control.implicitHeight, 40)
+        compare(control.height, 60)
+        compare(control.contentItem.height, control.height - control.topPadding - control.bottomPadding)
+
+        // reset explicit size
+        control.width = undefined
+        compare(control.implicitWidth, 30)
+        compare(control.width, 30)
+        compare(control.contentItem.width, control.width - control.leftPadding - control.rightPadding)
+
+        control.height = undefined
+        compare(control.implicitHeight, 40)
+        compare(control.height, 40)
+        compare(control.contentItem.height, control.height - control.topPadding - control.bottomPadding)
 
         control.destroy()
     }
 
-    // QTBUG-51989
     function test_visible() {
         var control = popupTemplate.createObject(testCase, {visible: true})
         verify(control)
 
+        // QTBUG-51989
         tryCompare(control, "visible", true)
+
+        // QTBUG-55347
+        control.parent = null
+        verify(!control.visible)
 
         control.destroy()
     }
@@ -967,18 +1051,13 @@ TestCase {
         ApplicationWindow {
             property alias firstDrawer: firstDrawer
             property alias secondDrawer: secondDrawer
-            property alias upperDrawer: upperDrawer
             property alias modalPopup: modalPopup
             property alias modelessPopup: modelessPopup
             property alias plainPopup: plainPopup
             property alias modalPopupWithoutDim: modalPopupWithoutDim
             visible: true
             Drawer {
-                z: 5
-                id: upperDrawer
-            }
-            Drawer {
-                z: 1
+                z: 0
                 id: firstDrawer
             }
             Drawer {
@@ -1033,51 +1112,42 @@ TestCase {
 
         window.requestActivate()
         tryCompare(window, "active", true)
-        compare(window.overlay.children.length, 6) // 3 drawers + 3 overlays
+
+        compare(window.overlay.children.length, 0)
 
         var firstOverlay = findOverlay(window, window.firstDrawer)
+        verify(!firstOverlay)
+        window.firstDrawer.open()
+        compare(window.overlay.children.length, 2) // 1 drawer + 1 overlay
+        firstOverlay = findOverlay(window, window.firstDrawer)
         verify(firstOverlay)
-        compare(firstOverlay.opacity, 0.0)
         compare(firstOverlay.z, window.firstDrawer.z)
         compare(indexOf(window.overlay.children, firstOverlay),
                 indexOf(window.overlay.children, window.firstDrawer.contentItem.parent) - 1)
+        tryCompare(firstOverlay, "opacity", 1.0)
 
         var secondOverlay = findOverlay(window, window.secondDrawer)
+        verify(!secondOverlay)
+        window.secondDrawer.open()
+        compare(window.overlay.children.length, 4) // 2 drawers + 2 overlays
+        secondOverlay = findOverlay(window, window.secondDrawer)
         verify(secondOverlay)
-        compare(secondOverlay.opacity, 0.0)
         compare(secondOverlay.z, window.secondDrawer.z)
         compare(indexOf(window.overlay.children, secondOverlay),
                 indexOf(window.overlay.children, window.secondDrawer.contentItem.parent) - 1)
+        tryCompare(secondOverlay, "opacity", 1.0)
 
-        var upperOverlay = findOverlay(window, window.upperDrawer)
-        verify(upperOverlay)
-        compare(upperOverlay.opacity, 0.0)
-        compare(upperOverlay.z, window.upperDrawer.z)
-        compare(indexOf(window.overlay.children, upperOverlay),
-                indexOf(window.overlay.children, window.upperDrawer.contentItem.parent) - 1)
-
-        window.firstDrawer.open()
-        compare(firstOverlay.z, 1.0)
-        tryCompare(firstOverlay, "opacity", 1.0)
         window.firstDrawer.close()
-        tryCompare(firstOverlay, "opacity", 0.0)
         tryCompare(window.firstDrawer, "visible", false)
+        firstOverlay = findOverlay(window, window.firstDrawer)
+        verify(!firstOverlay)
+        compare(window.overlay.children.length, 2) // 1 drawer + 1 overlay
 
-        window.secondDrawer.open()
-        compare(secondOverlay.z, 1.0)
-        tryCompare(secondOverlay, "opacity", 1.0)
         window.secondDrawer.close()
-        tryCompare(secondOverlay, "opacity", 0.0)
         tryCompare(window.secondDrawer, "visible", false)
-
-        window.firstDrawer.open()
-        window.secondDrawer.open()
-        tryCompare(firstOverlay, "opacity", 1.0)
-        tryCompare(secondOverlay, "opacity", 1.0)
-        window.firstDrawer.close()
-        window.secondDrawer.close()
-        tryCompare(firstOverlay, "opacity", 0.0)
-        tryCompare(secondOverlay, "opacity", 0.0)
+        secondOverlay = findOverlay(window, window.secondDrawer)
+        verify(!secondOverlay)
+        compare(window.overlay.children.length, 0)
 
         var modalOverlay = findOverlay(window, window.modalPopup)
         verify(!modalOverlay)
@@ -1087,6 +1157,7 @@ TestCase {
         compare(modalOverlay.z, window.modalPopup.z)
         compare(window.modalPopup.visible, true)
         tryCompare(modalOverlay, "opacity", 1.0)
+        compare(window.overlay.children.length, 2) // 1 popup + 1 overlay
 
         var modelessOverlay = findOverlay(window, window.modelessPopup)
         verify(!modelessOverlay)
@@ -1096,38 +1167,44 @@ TestCase {
         compare(modelessOverlay.z, window.modelessPopup.z)
         compare(window.modelessPopup.visible, true)
         tryCompare(modelessOverlay, "opacity", 1.0)
+        compare(window.overlay.children.length, 4) // 2 popups + 2 overlays
 
         window.modelessPopup.close()
-        tryCompare(modelessOverlay, "opacity", 0.0)
         tryCompare(window.modelessPopup, "visible", false)
         modelessOverlay = findOverlay(window, window.modelessPopup)
         verify(!modelessOverlay)
+        compare(window.overlay.children.length, 2) // 1 popup + 1 overlay
 
         compare(window.modalPopup.visible, true)
         compare(modalOverlay.opacity, 1.0)
 
         window.modalPopup.close()
-        tryCompare(modalOverlay, "opacity", 0.0)
         tryCompare(window.modalPopup, "visible", false)
         modalOverlay = findOverlay(window, window.modalPopup)
         verify(!modalOverlay)
+        compare(window.overlay.children.length, 0)
 
-        var countBefore = window.overlay.children.length
         window.plainPopup.open()
         tryCompare(window.plainPopup, "visible", true)
-        compare(window.overlay.children.length, countBefore + 1) // only popup added, no overlays involved
+        compare(window.overlay.children.length, 1) // only popup added, no overlays involved
+
+        window.plainPopup.modal = true
+        compare(window.overlay.children.length, 2) // overlay added
 
         window.plainPopup.close()
         tryCompare(window.plainPopup, "visible", false)
-        compare(window.overlay.children.length, countBefore) // only popup removed, no overlays involved
+        compare(window.overlay.children.length, 0) // popup + overlay removed
 
         window.modalPopupWithoutDim.open()
         tryCompare(window.modalPopupWithoutDim, "visible", true)
-        compare(window.overlay.children.length, countBefore + 1) // only popup added, no overlays involved
+        compare(window.overlay.children.length, 1) // only popup added, no overlays involved
+
+        window.modalPopupWithoutDim.dim = true
+        compare(window.overlay.children.length, 2) // overlay added
 
         window.modalPopupWithoutDim.close()
         tryCompare(window.modalPopupWithoutDim, "visible", false)
-        compare(window.overlay.children.length, countBefore) // only popup added, no overlays involved
+        compare(window.overlay.children.length, 0) // popup + overlay removed
 
         window.destroy()
     }

@@ -115,14 +115,13 @@ public:
     QString ipString;
     QString scopeId;
 
-    quint32 a;    // IPv4 address
     union {
         Q_IPV6ADDR a6; // IPv6 address
         struct { quint64 c[2]; } a6_64;
         struct { quint32 c[4]; } a6_32;
     };
-    QAbstractSocket::NetworkLayerProtocol protocol;
-
+    quint32 a;    // IPv4 address
+    qint8 protocol;
     bool isParsed;
 
     friend class QHostAddress;
@@ -701,7 +700,7 @@ quint32 QHostAddress::toIPv4Address(bool *ok) const
 QAbstractSocket::NetworkLayerProtocol QHostAddress::protocol() const
 {
     QT_ENSURE_PARSED(this);
-    return d->protocol;
+    return QAbstractSocket::NetworkLayerProtocol(d->protocol);
 }
 
 /*!
@@ -1016,7 +1015,7 @@ QPair<QHostAddress, int> QHostAddress::parseSubnet(const QString &subnet)
             netmask = parser.prefixLength();
         } else {
             bool ok;
-            netmask = subnet.mid(slash + 1).toUInt(&ok);
+            netmask = subnet.midRef(slash + 1).toUInt(&ok);
             if (!ok)
                 return invalid;     // failed to parse the subnet
         }

@@ -153,6 +153,9 @@ QQuickTextField::QQuickTextField(QQuickItem *parent) :
     d->pressHandler.control = this;
     d->setImplicitResizeEnabled(false);
     setActiveFocusOnTab(true);
+#ifndef QT_NO_CURSOR
+    setCursor(Qt::IBeamCursor);
+#endif
     QObjectPrivate::connect(this, &QQuickTextInput::readOnlyChanged,
                             d, &QQuickTextFieldPrivate::_q_readOnlyChanged);
     QObjectPrivate::connect(this, &QQuickTextInput::echoModeChanged,
@@ -236,6 +239,18 @@ QAccessible::Role QQuickTextFieldPrivate::accessibleRole() const
 }
 #endif
 
+/*
+   Deletes "delegate" if Component.completed() has been emitted,
+   otherwise stores it in pendingDeletions.
+*/
+void QQuickTextFieldPrivate::deleteDelegate(QObject *delegate)
+{
+    if (componentComplete)
+        delete delegate;
+    else
+        pendingDeletions.append(delegate);
+}
+
 QFont QQuickTextField::font() const
 {
     return QQuickTextInput::font();
@@ -274,7 +289,7 @@ void QQuickTextField::setBackground(QQuickItem *background)
     if (d->background == background)
         return;
 
-    delete d->background;
+    d->deleteDelegate(d->background);
     d->background = background;
     if (background) {
         background->setParentItem(this);
@@ -362,6 +377,9 @@ void QQuickTextField::componentComplete()
     if (!d->accessibleAttached && QAccessible::isActive())
         d->accessibilityActiveChanged(true);
 #endif
+
+    qDeleteAll(d->pendingDeletions);
+    d->pendingDeletions.clear();
 }
 
 void QQuickTextField::itemChange(QQuickItem::ItemChange change, const QQuickItem::ItemChangeData &value)
@@ -444,6 +462,16 @@ void QQuickTextField::mouseReleaseEvent(QMouseEvent *event)
         }
         QQuickTextInput::mouseReleaseEvent(event);
     }
+}
+
+void QQuickTextField::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    Q_D(QQuickTextField);
+    if (d->pressHandler.delayedMousePressEvent) {
+        QQuickTextInput::mousePressEvent(d->pressHandler.delayedMousePressEvent);
+        d->pressHandler.clearDelayedMouseEvent();
+    }
+    QQuickTextInput::mouseDoubleClickEvent(event);
 }
 
 void QQuickTextField::timerEvent(QTimerEvent *event)

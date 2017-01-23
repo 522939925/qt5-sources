@@ -86,7 +86,7 @@
          \li Parts of implementation of QSegfaultHandler class. \li BSD-style \li
     \row \li \l{QUrl::fromUserInput}{QUrl} \li Implementation of QUrl::fromUserInput(). \li Modified BSD \li
     \row \li \l{Contributions to the Cocoa Platform Plugin Files}{Cocoa Platform Plugin}
-         \li Specific parts of the Qt for OS X Cocoa port. \li BSD-style \li \l{Qt for OS X}
+         \li Specific parts of the Qt for macOS Cocoa port. \li BSD-style \li \l{Qt for macOS}
     \row \li \l{The qtmain Library}{qtmain library}
          \li A helper library for writing a cross-platform main() function on Windows. \li Modified BSD \li \l{Qt for Windows}
     \row \li \l{Shift-JIS Text Codec}
@@ -164,11 +164,25 @@
          \li Opensource project to map OpenGL ES API calls to DirectX API. \li BSD-style \li \l {Qt for Windows}
     \row \li \li \li \li
 
-    \row \li {1,4} Qt Location
+    \row \li {1,6} Qt Location
 
     \row \li {4,1} \b{Third-party Licenses}
     \row \li \l{Poly2Tri}
          \li Poly2Tri is a sweepline constrained Delaunay Polygon Triangulation Library. \li BSD-style \li
+    \row \li \l{Clipper}
+         \li Clipper is a freeware library for clipping and offsetting lines and polygons. \li BSD-style \li
+    \row \li \l{Clip2Tri}
+         \li Clip2Tri is an open source polygon triangulation library based on Poly2Tri. \li MIT  \li
+    \row \li \li \li \li
+
+    \row \li {1,4} Qt Bluetooth
+
+    \row \li {4,1} \b{Third-party Licenses}
+    \row \li \l{BlueZ}{BlueZ}
+         \li BlueZ is a Bluetooth stack for Linux based operating systems
+         \li GPL v2
+         \li Used by sdpscanner tool which is called by \l {Qt Bluetooth} on BlueZ 5 systems.
+             Qt applications do \e not link to GPL code.
     \row \li \li \li \li
 
     \row \li {1,4} Qt Multimedia
@@ -194,6 +208,14 @@
     \row \li \l{Qt SVG License Information}
          \li Parts of code for arc handling in Qt SVG module. \li BSD-style \li Depends on Qt Gui, Qt Widgets
     \row \li \li \li \li
+    \row \li \li \li \li
+
+    \row \li {1,4} Qt QML
+
+    \row \li {4,1} \b{Third-party Licenses}
+    \row \li \l{JavaScriptCore Macro Assembler}
+         \li The assembly code generated use by the JIT.
+         \li BSD-style \li
     \row \li \li \li \li
 
     \row \li {1,4} Qt Quick
@@ -384,8 +406,11 @@
          \li The header is based on OpenKODE Core 1.0 specification.
          \li MIT License
 
-    \endtable
+    \row \li \l{V8 double/string conversion library}
+         \li String conversion routines for IEEE doubles.
+         \li BSD-style \li
 
+    \endtable
     \section1 Additional information
 
     The documents below list related documents, such as information about Trademark and other

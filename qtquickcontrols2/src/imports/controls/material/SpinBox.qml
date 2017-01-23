@@ -58,20 +58,17 @@ T.SpinBox {
     leftPadding: (control.mirrored ? (up.indicator ? up.indicator.width : 0) : (down.indicator ? down.indicator.width : 0))
     rightPadding: (control.mirrored ? (down.indicator ? down.indicator.width : 0) : (up.indicator ? up.indicator.width : 0))
 
-    //! [validator]
     validator: IntValidator {
         locale: control.locale.name
         bottom: Math.min(control.from, control.to)
         top: Math.max(control.from, control.to)
     }
-    //! [validator]
 
-    //! [contentItem]
     contentItem: TextInput {
         text: control.textFromValue(control.value, control.locale)
 
         font: control.font
-        color: control.Material.primaryTextColor
+        color: enabled ? control.Material.primaryTextColor : control.Material.hintTextColor
         selectionColor: control.Material.textSelectionColor
         selectedTextColor: control.Material.primaryTextColor
         horizontalAlignment: Qt.AlignHCenter
@@ -95,7 +92,7 @@ T.SpinBox {
                 id: timer
                 running: control.activeFocus
                 repeat: true
-                interval: Qt.styleHints.cursorFlashTime
+                interval: Qt.styleHints.cursorFlashTime / 2
                 onTriggered: cursor.opacity = !cursor.opacity ? 1 : 0
                 // force the cursor visible when gaining focus
                 onRunningChanged: cursor.opacity = 1
@@ -106,9 +103,7 @@ T.SpinBox {
         validator: control.validator
         inputMethodHints: Qt.ImhFormattedNumbersOnly
     }
-    //! [contentItem]
 
-    //! [up.indicator]
     up.indicator: PaddedRectangle {
         x: control.mirrored ? 0 : parent.width - width
         implicitWidth: 48
@@ -116,7 +111,7 @@ T.SpinBox {
         height: parent.height
         width: height
         padding: control.spacing
-        radius: 3
+        radius: 2
         color: Qt.tint(Qt.tint(control.Material.buttonColor,
                                control.activeFocus ? control.Material.buttonHoverColor : "transparent"),
                                control.up.pressed ? control.Material.buttonPressColor: "transparent")
@@ -136,9 +131,7 @@ T.SpinBox {
             color: enabled ? control.Material.primaryTextColor : control.Material.spinBoxDisabledIconColor
         }
     }
-    //! [up.indicator]
 
-    //! [down.indicator]
     down.indicator: PaddedRectangle {
         x: control.mirrored ? parent.width - width : 0
         implicitWidth: 48
@@ -146,7 +139,7 @@ T.SpinBox {
         height: parent.height
         width: height
         padding: control.spacing
-        radius: 3
+        radius: 2
         color: Qt.tint(Qt.tint(control.Material.buttonColor,
                                control.activeFocus ? control.Material.buttonHoverColor : "transparent"),
                                control.down.pressed ? control.Material.buttonPressColor : "transparent")
@@ -159,9 +152,7 @@ T.SpinBox {
             color: enabled ? control.Material.primaryTextColor : control.Material.spinBoxDisabledIconColor
         }
     }
-    //! [down.indicator]
 
-    //! [background]
     background: Item {
         implicitWidth: 192
         implicitHeight: 48
@@ -174,5 +165,4 @@ T.SpinBox {
             color: control.activeFocus ? control.Material.accentColor : control.Material.hintTextColor
         }
     }
-    //! [background]
 }

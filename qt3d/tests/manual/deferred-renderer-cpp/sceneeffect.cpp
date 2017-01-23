@@ -54,6 +54,8 @@
 #include <Qt3DRender/QShaderProgram>
 #include <QUrl>
 
+QT_BEGIN_NAMESPACE
+
 SceneEffect::SceneEffect(Qt3DCore::QNode *parent)
     : Qt3DRender::QEffect(parent)
     , m_gl3Technique(new Qt3DRender::QTechnique())
@@ -63,10 +65,10 @@ SceneEffect::SceneEffect(Qt3DCore::QNode *parent)
     , m_passCriterion(new Qt3DRender::QFilterKey(this))
 {
 
-    m_gl3Technique->graphicsApiFilter()->setProfile(Qt3DRender::QGraphicsApiFilter::NoProfile);
+    m_gl3Technique->graphicsApiFilter()->setProfile(Qt3DRender::QGraphicsApiFilter::CoreProfile);
     m_gl3Technique->graphicsApiFilter()->setApi(Qt3DRender::QGraphicsApiFilter::OpenGL);
     m_gl3Technique->graphicsApiFilter()->setMajorVersion(3);
-    m_gl3Technique->graphicsApiFilter()->setMinorVersion(3);
+    m_gl3Technique->graphicsApiFilter()->setMinorVersion(1);
 
     m_gl2Technique->graphicsApiFilter()->setApi(Qt3DRender::QGraphicsApiFilter::OpenGL);
     m_gl2Technique->graphicsApiFilter()->setMajorVersion(2);
@@ -101,3 +103,5 @@ QList<Qt3DRender::QFilterKey *> SceneEffect::passCriteria() const
 {
     return QList<Qt3DRender::QFilterKey *>() << m_passCriterion;
 }
+
+QT_END_NAMESPACE

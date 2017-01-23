@@ -333,6 +333,14 @@ public:
     static void initialize();
     static NodeType goal(const QString& t) { return goals_.value(t); }
 
+/*!
+  Returns \c true if the node \a n1 is less than node \a n2. The
+  comparison is performed by comparing properties of the nodes
+  in order of increasing complexity.
+*/
+    static bool nodeNameLessThan(const Node *first, const Node *second);
+
+
 protected:
     Node(NodeType type, Aggregate* parent, const QString& name);
     void removeRelates();
@@ -632,7 +640,7 @@ public:
     virtual bool isInternal() const Q_DECL_OVERRIDE { return (status() == Internal); }
     virtual QString qmlFullBaseName() const Q_DECL_OVERRIDE;
     virtual QString obsoleteLink() const Q_DECL_OVERRIDE { return obsoleteLink_; }
-    virtual void setObsoleteLink(const QString& t) Q_DECL_OVERRIDE { obsoleteLink_ = t; };
+    virtual void setObsoleteLink(const QString& t) Q_DECL_OVERRIDE { obsoleteLink_ = t; }
     virtual QString logicalModuleName() const Q_DECL_OVERRIDE;
     virtual QString logicalModuleVersion() const Q_DECL_OVERRIDE;
     virtual QString logicalModuleIdentifier() const Q_DECL_OVERRIDE;
@@ -644,17 +652,17 @@ public:
     const QString& qmlBaseName() const { return qmlBaseName_; }
     void setQmlBaseName(const QString& name) { qmlBaseName_ = name; }
     bool qmlBaseNodeNotSet() const { return (qmlBaseNode_ == 0); }
-    virtual QmlTypeNode* qmlBaseNode() Q_DECL_OVERRIDE;
+    virtual QmlTypeNode* qmlBaseNode() Q_DECL_OVERRIDE { return qmlBaseNode_; }
     void setQmlBaseNode(QmlTypeNode* b) { qmlBaseNode_ = b; }
     void requireCppClass() { cnodeRequired_ = true; }
     bool cppClassRequired() const { return cnodeRequired_; }
-    static void addInheritedBy(const QString& base, Node* sub);
-    static void subclasses(const QString& base, NodeList& subs);
+    static void addInheritedBy(const Node *base, Node* sub);
+    static void subclasses(const Node *base, NodeList& subs);
     static void terminate();
 
 public:
     static bool qmlOnly;
-    static QMultiMap<QString,Node*> inheritedBy;
+    static QMultiMap<const Node*, Node*> inheritedBy;
 
 private:
     bool abstract_;

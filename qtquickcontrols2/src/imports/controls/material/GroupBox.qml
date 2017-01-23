@@ -37,6 +37,7 @@
 import QtQuick 2.6
 import QtQuick.Templates 2.0 as T
 import QtQuick.Controls.Material 2.0
+import QtQuick.Controls.Material.impl 2.0
 
 T.GroupBox {
     id: control
@@ -53,11 +54,8 @@ T.GroupBox {
     padding: 12
     topPadding: padding + (label && label.implicitWidth > 0 ? label.implicitHeight + spacing : 0)
 
-    //! [contentItem]
     contentItem: Item {}
-    //! [contentItem]
 
-    //! [label]
     label: Text {
         x: control.leftPadding
         width: control.availableWidth
@@ -69,17 +67,19 @@ T.GroupBox {
         horizontalAlignment: Text.AlignLeft
         verticalAlignment: Text.AlignVCenter
     }
-    //! [label]
 
-    //! [background]
     background: Rectangle {
         y: control.topPadding - control.padding
         width: parent.width
         height: parent.height - control.topPadding + control.padding
 
-        radius: 3
-        color: "transparent"
+        radius: 2
+        color: control.Material.elevation > 0 ? control.Material.backgroundColor : "transparent"
         border.color: control.Material.frameColor
+
+        layer.enabled: control.enabled && control.Material.elevation > 0
+        layer.effect: ElevationEffect {
+            elevation: control.Material.elevation
+        }
     }
-    //! [background]
 }

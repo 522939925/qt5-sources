@@ -70,13 +70,44 @@ void createPlaneVertexData(float w, float h, const QSize &resolution,
     const float b0 = -h / 2.0f;
     const float da = w / (resolution.width() - 1);
     const float db = h / (resolution.height() - 1);
-    const float du = 1.0 / (resolution.width() - 1);
-    const float dv = 1.0 / (resolution.height() - 1);
-    float n = 1.0f;
+    const float du = 1.0f / (resolution.width() - 1);
+    const float dv = 1.0f / (resolution.height() - 1);
 
     switch (normal) {
     case NegativeX:
-        n = -1.0f; // fall through
+        // Iterate over z
+        for (int j = resolution.height() - 1; j >= 0; --j) {
+            const float b = b0 + static_cast<float>(j) * db;
+            const float v = static_cast<float>(j) * dv;
+
+            // Iterate over y
+            for (int i = 0; i < resolution.width(); ++i) {
+                const float a = a0 + static_cast<float>(i) * da;
+                const float u = static_cast<float>(i) * du;
+
+                // position
+                *vertices++ = planeDistance;
+                *vertices++ = a;
+                *vertices++ = b;
+
+                // texture coordinates
+                *vertices++ = v;
+                *vertices++ = u;
+
+                // normal
+                *vertices++ = -1.0f;
+                *vertices++ = 0.0f;
+                *vertices++ = 0.0f;
+
+                // tangent
+                *vertices++ = 0.0f;
+                *vertices++ = 0.0f;
+                *vertices++ = 1.0f;
+                *vertices++ = 1.0f;
+            }
+        }
+        break;
+
     case PositiveX: {
         // Iterate over z
         for (int j = 0; j < resolution.height(); ++j) {
@@ -94,18 +125,18 @@ void createPlaneVertexData(float w, float h, const QSize &resolution,
                 *vertices++ = b;
 
                 // texture coordinates
+                *vertices++ = 1.0f - v;
                 *vertices++ = u;
-                *vertices++ = v;
 
                 // normal
-                *vertices++ = n;
+                *vertices++ = 1.0f;
                 *vertices++ = 0.0f;
                 *vertices++ = 0.0f;
 
                 // tangent
                 *vertices++ = 0.0f;
                 *vertices++ = 0.0f;
-                *vertices++ = 1.0f;
+                *vertices++ = -1.0f;
                 *vertices++ = 1.0f;
             }
         }
@@ -113,8 +144,6 @@ void createPlaneVertexData(float w, float h, const QSize &resolution,
     }
 
     case NegativeY:
-        n = -1.0f;
-    case PositiveY: {
         // Iterate over z
         for (int j = 0; j < resolution.height(); ++j) {
             const float b = b0 + static_cast<float>(j) * db;
@@ -123,7 +152,7 @@ void createPlaneVertexData(float w, float h, const QSize &resolution,
             // Iterate over x
             // This iterates in the opposite sense to the other directions
             // so that the winding order is correct
-            for (int i = resolution.width() - 1; i >= 0; --i) {
+            for (int i = 0; i < resolution.width(); ++i) {
                 const float a = a0 + static_cast<float>(i) * da;
                 const float u = static_cast<float>(i) * du;
 
@@ -138,7 +167,43 @@ void createPlaneVertexData(float w, float h, const QSize &resolution,
 
                 // normal
                 *vertices++ = 0.0f;
-                *vertices++ = n;
+                *vertices++ = -1.0f;
+                *vertices++ = 0.0f;
+
+                // tangent
+                *vertices++ = 1.0f;
+                *vertices++ = 0.0f;
+                *vertices++ = 0.0f;
+                *vertices++ = 1.0f;
+            }
+        }
+        break;
+
+    case PositiveY: {
+        // Iterate over z
+        for (int j = resolution.height() - 1; j >= 0; --j) {
+            const float b = b0 + static_cast<float>(j) * db;
+            const float v = static_cast<float>(j) * dv;
+
+            // Iterate over x
+            // This iterates in the opposite sense to the other directions
+            // so that the winding order is correct
+            for (int i = 0; i < resolution.width(); ++i) {
+                const float a = a0 + static_cast<float>(i) * da;
+                const float u = static_cast<float>(i) * du;
+
+                // position
+                *vertices++ = a;
+                *vertices++ = planeDistance;
+                *vertices++ = b;
+
+                // texture coordinates
+                *vertices++ = u;
+                *vertices++ = 1.0f - v;
+
+                // normal
+                *vertices++ = 0.0f;
+                *vertices++ = 1.0f;
                 *vertices++ = 0.0f;
 
                 // tangent
@@ -152,7 +217,39 @@ void createPlaneVertexData(float w, float h, const QSize &resolution,
     }
 
     case NegativeZ:
-        n = -1.0f;
+        // Iterate over y
+        for (int j = 0; j < resolution.height(); ++j) {
+            const float b = b0 + static_cast<float>(j) * db;
+            const float v = static_cast<float>(j) * dv;
+
+            // Iterate over x
+            for (int i = resolution.width() - 1; i >= 0; --i) {
+                const float a = a0 + static_cast<float>(i) * da;
+                const float u = static_cast<float>(i) * du;
+
+                // position
+                *vertices++ = a;
+                *vertices++ = b;
+                *vertices++ = planeDistance;
+
+                // texture coordinates
+                *vertices++ = 1.0f - u;
+                *vertices++ = v;
+
+                // normal
+                *vertices++ = 0.0f;
+                *vertices++ = 0.0f;
+                *vertices++ = -1.0f;
+
+                // tangent
+                *vertices++ = -1.0f;
+                *vertices++ = 0.0f;
+                *vertices++ = 0.0f;
+                *vertices++ = 1.0f;
+            }
+        }
+        break;
+
     case PositiveZ: {
         // Iterate over y
         for (int j = 0; j < resolution.height(); ++j) {
@@ -176,7 +273,7 @@ void createPlaneVertexData(float w, float h, const QSize &resolution,
                 // normal
                 *vertices++ = 0.0f;
                 *vertices++ = 0.0f;
-                *vertices++ = n;
+                *vertices++ = 1.0f;
 
                 // tangent
                 *vertices++ = 1.0f;
@@ -190,54 +287,24 @@ void createPlaneVertexData(float w, float h, const QSize &resolution,
     } // switch (normal)
 }
 
-void createPlaneIndexData(PlaneNormal normal, const QSize &resolution, quint16 *indices, quint16 &baseVertex)
+void createPlaneIndexData(const QSize &resolution, quint16 *indices, quint16 &baseVertex)
 {
-    float n = 1.0f;
-
-    switch (normal) {
-    case NegativeX:
-    case NegativeY:
-    case NegativeZ:
-        n = -1.0f;
-        break;
-    default:
-        break;
-    }
-
     // Populate indices taking care to get correct CCW winding on all faces
-    if (n > 0.0f) {
-        for (int j = 0; j < resolution.height() - 1; ++j) {
-            const int rowStartIndex = j * resolution.width() + baseVertex;
-            const int nextRowStartIndex = (j + 1) * resolution.width() + baseVertex;
+    // Iterate over v direction (rows)
+    for (int j = 0; j < resolution.height() - 1; ++j) {
+        const int rowStartIndex = j * resolution.width() + baseVertex;
+        const int nextRowStartIndex = (j + 1) * resolution.width() + baseVertex;
 
-            // Iterate over x
-            for (int i = 0; i < resolution.width() - 1; ++i) {
-                // Split quad into two triangles
-                *indices++ = rowStartIndex + i;
-                *indices++ = rowStartIndex + i + 1;
-                *indices++ = nextRowStartIndex + i;
+        // Iterate over u direction (columns)
+        for (int i = 0; i < resolution.width() - 1; ++i) {
+            // Split quad into two triangles
+            *indices++ = rowStartIndex + i;
+            *indices++ = rowStartIndex + i + 1;
+            *indices++ = nextRowStartIndex + i;
 
-                *indices++ = nextRowStartIndex + i;
-                *indices++ = rowStartIndex + i + 1;
-                *indices++ = nextRowStartIndex + i + 1;
-            }
-        }
-    } else {
-        for (int j = 0; j < resolution.height() - 1; ++j) {
-            const int rowStartIndex = j * resolution.width() + baseVertex;
-            const int nextRowStartIndex = (j + 1) * resolution.width() + baseVertex;
-
-            // Iterate over x
-            for (int i = 0; i < resolution.width() - 1; ++i) {
-                // Split quad into two triangles
-                *indices++ = rowStartIndex + i;
-                *indices++ = nextRowStartIndex + i;
-                *indices++ = rowStartIndex + i + 1;
-
-                *indices++ = nextRowStartIndex + i;
-                *indices++ = nextRowStartIndex + i + 1;
-                *indices++ = rowStartIndex + i + 1;
-            }
+            *indices++ = nextRowStartIndex + i;
+            *indices++ = rowStartIndex + i + 1;
+            *indices++ = nextRowStartIndex + i + 1;
         }
     }
     baseVertex += resolution.width() * resolution.height();
@@ -299,17 +366,17 @@ QByteArray createCuboidIndexData(const QSize &yzResolution,
     quint16 *indices = reinterpret_cast<quint16 *>(indexData.data());
     quint16 baseIndex = 0;
 
-    createPlaneIndexData(PositiveX, yzResolution, indices, baseIndex);
+    createPlaneIndexData(yzResolution, indices, baseIndex);
     indices += yzIndices;
-    createPlaneIndexData(NegativeX, yzResolution, indices, baseIndex);
+    createPlaneIndexData(yzResolution, indices, baseIndex);
     indices += yzIndices;
-    createPlaneIndexData(PositiveY, xzResolution, indices, baseIndex);
+    createPlaneIndexData(xzResolution, indices, baseIndex);
     indices += xzIndices;
-    createPlaneIndexData(NegativeY, xzResolution, indices, baseIndex);
+    createPlaneIndexData(xzResolution, indices, baseIndex);
     indices += xzIndices;
-    createPlaneIndexData(PositiveZ, xyResolution, indices, baseIndex);
+    createPlaneIndexData(xyResolution, indices, baseIndex);
     indices += xyIndices;
-    createPlaneIndexData(NegativeZ, xyResolution, indices, baseIndex);
+    createPlaneIndexData(xyResolution, indices, baseIndex);
 
     return indexData;
 }
@@ -496,44 +563,54 @@ void QCuboidGeometryPrivate::init()
 
 /*!
  * \qmltype CuboidGeometry
- * \instantiates Qt3DRender::QCuboidGeometry
- * \inqmlmodule Qt3D.Render
+ * \instantiates Qt3DExtras::QCuboidGeometry
+ * \inqmlmodule Qt3D.Extras
+ * \brief CuboidGeometry allows creation of a cuboid in 3D space.
+ *
+ * The CuboidGeometry type is most commonly used internally by the CuboidMesh type
+ * but can also be used in custom GeometryRenderer types.
  */
 
 /*!
- * \qmlproperty float CuboidGeometry::xExtent
+ * \qmlproperty real CuboidGeometry::xExtent
  *
- * Holds the x extent.
+ * Holds the x extent of the geometry.
  */
 
 /*!
- * \qmlproperty float CuboidGeometry::yExtent
+ * \qmlproperty real CuboidGeometry::yExtent
  *
- * Holds the y extent.
+ * Holds the y extent of the geometry.
  */
 
 /*!
- * \qmlproperty float CuboidGeometry::zExtent
+ * \qmlproperty real CuboidGeometry::zExtent
  *
- * Holds the z extent.
+ * Holds the z extent of the geometry.
  */
 
 /*!
  * \qmlproperty size CuboidGeometry::yzMeshResolution
  *
  * Holds the y-z resolution.
+ * The width and height values of this property specify the number of vertices generated for
+ * the y-z faces of the mesh.
  */
 
 /*!
  * \qmlproperty size CuboidGeometry::xzMeshResolution
  *
  * Holds the x-z resolution.
+ * The width and height values of this property specify the number of vertices generated for
+ * the x-z faces of the mesh.
  */
 
 /*!
  * \qmlproperty size CuboidGeometry::xyMeshResolution
  *
  * Holds the x-y resolution.
+ * The width and height values of this property specify the number of vertices generated for
+ * the x-y faces of the mesh.
  */
 
 /*!
@@ -567,11 +644,15 @@ void QCuboidGeometryPrivate::init()
  */
 
 /*!
- * \class Qt3DRender::QCuboidGeometry
- * \inmodule Qt3DRender
- *
+ * \class Qt3DExtras::QCuboidGeometry
+ * \inmodule Qt3DExtras
+ * \brief The QCuboidGeometry class allows creation of a cuboid in 3D space.
+ * \since 5.7
+ * \ingroup geometries
  * \inherits Qt3DRender::QGeometry
  *
+ * The QCuboidGeometry class is most commonly used internally by the QCuboidMesh
+ * but can also be used in custom Qt3DRender::QGeometryRenderer subclasses.
  */
 
 /*!
@@ -703,7 +784,7 @@ void QCuboidGeometry::setXYMeshResolution(const QSize &resolution)
 /*!
  * \property QCuboidGeometry::xExtent
  *
- * Holds the x extent.
+ * Holds the x extent of the geometry.
  */
 float QCuboidGeometry::xExtent() const
 {
@@ -714,7 +795,7 @@ float QCuboidGeometry::xExtent() const
 /*!
  * \property QCuboidGeometry::yExtent
  *
- * Holds the y extent.
+ * Holds the y extent of the geometry.
  */
 float QCuboidGeometry::yExtent() const
 {
@@ -725,7 +806,7 @@ float QCuboidGeometry::yExtent() const
 /*!
  * \property QCuboidGeometry::zExtent
  *
- * Holds the z extent.
+ * Holds the z extent of the geometry.
  */
 float QCuboidGeometry::zExtent() const
 {
@@ -737,6 +818,8 @@ float QCuboidGeometry::zExtent() const
  * \property QCuboidGeometry::yzMeshResolution
  *
  * Holds the y-z resolution.
+ * The width and height values of this property specify the number of vertices generated for
+ * the y-z faces of the mesh.
  */
 QSize QCuboidGeometry::yzMeshResolution() const
 {
@@ -748,6 +831,8 @@ QSize QCuboidGeometry::yzMeshResolution() const
  * \property QCuboidGeometry::xzMeshResolution
  *
  * Holds the x-z resolution.
+ * The width and height values of this property specify the number of vertices generated for
+ * the x-z faces of the mesh.
  */
 QSize QCuboidGeometry::xyMeshResolution() const
 {
@@ -759,6 +844,8 @@ QSize QCuboidGeometry::xyMeshResolution() const
  * \property QCuboidGeometry::xyMeshResolution
  *
  * Holds the x-y resolution.
+ * The width and height values of this property specify the number of vertices generated for
+ * the x-y faces of the mesh.
  */
 QSize QCuboidGeometry::xzMeshResolution() const
 {

@@ -37,7 +37,7 @@
 #include "qquickpopup_p.h"
 #include "qquickpopup_p_p.h"
 #include "qquickapplicationwindow_p.h"
-#include "qquickoverlay_p.h"
+#include "qquickoverlay_p_p.h"
 #include "qquickcontrol_p_p.h"
 
 #include <QtQml/qqmlinfo.h>
@@ -91,7 +91,10 @@ QT_BEGIN_NAMESPACE
     scene, it is recommended to use ApplicationWindow. ApplicationWindow also
     provides background dimming effects.
 
-    \sa {Popup Controls}
+    Popup lays out its content in a similar fashion to \l Control. For more
+    information, see the \l {Control Layout} section of the documentation.
+
+    \sa {Popup Controls}, {Customizing Popup}, ApplicationWindow
 */
 
 /*!
@@ -115,8 +118,7 @@ static const QQuickItemPrivate::ChangeTypes AncestorChangeTypes = QQuickItemPriv
                                                                   | QQuickItemPrivate::Children;
 
 static const QQuickItemPrivate::ChangeTypes ItemChangeTypes = QQuickItemPrivate::Geometry
-                                                             | QQuickItemPrivate::Parent
-                                                             | QQuickItemPrivate::Destroyed;
+                                                             | QQuickItemPrivate::Parent;
 
 QQuickPopupPrivate::QQuickPopupPrivate()
     : QObjectPrivate()
@@ -126,12 +128,18 @@ QQuickPopupPrivate::QQuickPopupPrivate()
     , hasDim(false)
     , visible(false)
     , complete(false)
+    , hasWidth(false)
+    , hasHeight(false)
     , hasTopMargin(false)
     , hasLeftMargin(false)
     , hasRightMargin(false)
     , hasBottomMargin(false)
     , allowVerticalFlip(false)
     , allowHorizontalFlip(false)
+    , allowVerticalMove(true)
+    , allowHorizontalMove(true)
+    , allowVerticalResize(true)
+    , allowHorizontalResize(true)
     , hadActiveFocusBeforeExitTransition(false)
     , x(0)
     , y(0)
@@ -144,6 +152,7 @@ QQuickPopupPrivate::QQuickPopupPrivate()
     , bottomMargin(0)
     , contentWidth(0)
     , contentHeight(0)
+    , transitionState(QQuickPopupPrivate::NoTransition)
     , closePolicy(QQuickPopup::CloseOnEscape | QQuickPopup::CloseOnPressOutside)
     , parentItem(nullptr)
     , dimmer(nullptr)
@@ -153,6 +162,10 @@ QQuickPopupPrivate::QQuickPopupPrivate()
     , popupItem(nullptr)
     , positioner(this)
     , transitionManager(this)
+{
+}
+
+QQuickPopupPrivate::~QQuickPopupPrivate()
 {
 }
 
@@ -181,43 +194,46 @@ bool QQuickPopupPrivate::tryClose(QQuickItem *item, QMouseEvent *event)
     return false;
 }
 
-void QQuickPopupPrivate::prepareEnterTransition(bool notify)
+bool QQuickPopupPrivate::prepareEnterTransition()
 {
     Q_Q(QQuickPopup);
     if (!window) {
         qmlInfo(q) << "cannot find any window to open popup in.";
-        return;
+        return false;
     }
 
-    QQuickApplicationWindow *applicationWindow = qobject_cast<QQuickApplicationWindow*>(window);
-    if (!applicationWindow) {
-        window->installEventFilter(q);
-        popupItem->setZ(10001); // DefaultWindowDecoration+1
-        popupItem->setParentItem(window->contentItem());
-    } else {
-        popupItem->setParentItem(applicationWindow->overlay());
-    }
+    if (transitionState == EnterTransition && transitionManager.isRunning())
+        return false;
 
-    if (notify)
+    if (transitionState != EnterTransition) {
+        popupItem->setParentItem(QQuickOverlay::overlay(window));
         emit q->aboutToShow();
-    visible = notify;
-    popupItem->setVisible(true);
-    positioner.setParentItem(parentItem);
-    emit q->visibleChanged();
+        visible = true;
+        transitionState = EnterTransition;
+        popupItem->setVisible(true);
+        positioner.setParentItem(parentItem);
+        emit q->visibleChanged();
+    }
+    return true;
 }
 
-void QQuickPopupPrivate::prepareExitTransition()
+bool QQuickPopupPrivate::prepareExitTransition()
 {
     Q_Q(QQuickPopup);
-    if (window && !qobject_cast<QQuickApplicationWindow *>(window))
-        window->removeEventFilter(q);
-    if (focus) {
-        // The setFocus(false) call below removes any active focus before we're
-        // able to check it in finalizeExitTransition.
-        hadActiveFocusBeforeExitTransition = popupItem->hasActiveFocus();
-        popupItem->setFocus(false);
+    if (transitionState == ExitTransition && transitionManager.isRunning())
+        return false;
+
+    if (transitionState != ExitTransition) {
+        if (focus) {
+            // The setFocus(false) call below removes any active focus before we're
+            // able to check it in finalizeExitTransition.
+            hadActiveFocusBeforeExitTransition = popupItem->hasActiveFocus();
+            popupItem->setFocus(false);
+        }
+        transitionState = ExitTransition;
+        emit q->aboutToHide();
     }
-    emit q->aboutToHide();
+    return true;
 }
 
 void QQuickPopupPrivate::finalizeEnterTransition()
@@ -225,27 +241,29 @@ void QQuickPopupPrivate::finalizeEnterTransition()
     Q_Q(QQuickPopup);
     if (focus)
         popupItem->setFocus(true);
+    transitionState = NoTransition;
     emit q->opened();
 }
 
-void QQuickPopupPrivate::finalizeExitTransition(bool hide)
+void QQuickPopupPrivate::finalizeExitTransition()
 {
     Q_Q(QQuickPopup);
     positioner.setParentItem(nullptr);
-    if (hide) {
-        popupItem->setParentItem(nullptr);
-        popupItem->setVisible(false);
-    }
+    popupItem->setParentItem(nullptr);
+    popupItem->setVisible(false);
 
-    if (hadActiveFocusBeforeExitTransition) {
-        QQuickApplicationWindow *applicationWindow = qobject_cast<QQuickApplicationWindow*>(window);
-        if (applicationWindow)
-            applicationWindow->contentItem()->setFocus(true);
-        else if (window)
-            window->contentItem()->setFocus(true);
+    if (hadActiveFocusBeforeExitTransition && window) {
+        if (!qobject_cast<QQuickPopupItem *>(window->activeFocusItem())) {
+            QQuickApplicationWindow *applicationWindow = qobject_cast<QQuickApplicationWindow*>(window);
+            if (applicationWindow)
+                applicationWindow->contentItem()->setFocus(true);
+            else
+                window->contentItem()->setFocus(true);
+        }
     }
 
     visible = false;
+    transitionState = NoTransition;
     hadActiveFocusBeforeExitTransition = false;
     emit q->visibleChanged();
     emit q->closed();
@@ -315,6 +333,18 @@ void QQuickPopupPrivate::setWindow(QQuickWindow *newWindow)
     if (window == newWindow)
         return;
 
+    if (window) {
+        QQuickOverlay *overlay = QQuickOverlay::overlay(window);
+        if (overlay)
+            QQuickOverlayPrivate::get(overlay)->removePopup(q);
+    }
+
+    if (newWindow) {
+        QQuickOverlay *overlay = QQuickOverlay::overlay(newWindow);
+        if (overlay)
+            QQuickOverlayPrivate::get(overlay)->addPopup(q);
+    }
+
     window = newWindow;
     emit q->windowChanged(newWindow);
 }
@@ -364,6 +394,11 @@ QQuickPopupItem::QQuickPopupItem(QQuickPopup *popup) :
     setVisible(false);
     setFlag(ItemIsFocusScope);
     setAcceptedMouseButtons(Qt::AllButtons);
+
+    // TODO: switch to QStyleHints::useHoverEffects in Qt 5.8
+    setAcceptHoverEvents(true);
+    // setAcceptHoverEvents(QGuiApplication::styleHints()->useHoverEffects());
+    // connect(QGuiApplication::styleHints(), &QStyleHints::useHoverEffectsChanged, this, &QQuickItem::setAcceptHoverEvents);
 }
 
 bool QQuickPopupItem::childMouseEventFilter(QQuickItem *child, QEvent *event)
@@ -546,14 +581,11 @@ void QQuickPopupPositioner::itemChildRemoved(QQuickItem *item, QQuickItem *child
         removeAncestorListeners(item);
 }
 
-void QQuickPopupPositioner::itemDestroyed(QQuickItem *item)
+void QQuickPopupPrivate::itemDestroyed(QQuickItem *item)
 {
-    Q_ASSERT(m_parentItem == item);
-
-    m_parentItem = nullptr;
-    m_popup->parentItem = nullptr;
-    QQuickItemPrivate::get(item)->removeItemChangeListener(this, ItemChangeTypes);
-    removeAncestorListeners(item->parentItem());
+    Q_Q(QQuickPopup);
+    if (item == parentItem)
+        q->setParentItem(nullptr);
 }
 
 void QQuickPopupPrivate::reposition()
@@ -570,13 +602,19 @@ void QQuickPopupPrivate::reposition()
     bool widthAdjusted = false;
     bool heightAdjusted = false;
 
-    QRectF rect(x, y, iw > 0 ? iw : w, ih > 0 ? ih : h);
+    QRectF rect(allowHorizontalMove ? x : popupItem->x(),
+                allowVerticalMove ? y : popupItem->y(),
+                !hasWidth && iw > 0 ? iw : w,
+                !hasHeight && ih > 0 ? ih : h);
     if (parentItem) {
         rect = parentItem->mapRectToScene(rect);
 
         if (window) {
             const QMarginsF margins = getMargins();
-            const QRectF bounds = QRectF(0, 0, window->width(), window->height()).marginsRemoved(margins);
+            const QRectF bounds(qMax<qreal>(0.0, margins.left()),
+                                qMax<qreal>(0.0, margins.top()),
+                                window->width() - qMax<qreal>(0.0, margins.left()) - qMax<qreal>(0.0, margins.right()),
+                                window->height() - qMax<qreal>(0.0, margins.top()) - qMax<qreal>(0.0, margins.bottom()));
 
             // if the popup doesn't fit horizontally inside the window, try flipping it around (left <-> right)
             if (allowHorizontalFlip && (rect.left() < bounds.left() || rect.right() > bounds.right())) {
@@ -593,31 +631,39 @@ void QQuickPopupPrivate::reposition()
             }
 
             // push inside the margins if specified
-            if (margins.top() >= 0 && rect.top() < bounds.top())
-                rect.moveTop(margins.top());
-            if (margins.bottom() >= 0 && rect.bottom() > bounds.bottom())
-                rect.moveBottom(bounds.bottom());
-            if (margins.left() >= 0 && rect.left() < bounds.left())
-                rect.moveLeft(margins.left());
-            if (margins.right() >= 0 && rect.right() > bounds.right())
-                rect.moveRight(bounds.right());
+            if (allowVerticalMove) {
+                if (margins.top() >= 0 && rect.top() < bounds.top())
+                    rect.moveTop(margins.top());
+                if (margins.bottom() >= 0 && rect.bottom() > bounds.bottom())
+                    rect.moveBottom(bounds.bottom());
+            }
+            if (allowHorizontalMove) {
+                if (margins.left() >= 0 && rect.left() < bounds.left())
+                    rect.moveLeft(margins.left());
+                if (margins.right() >= 0 && rect.right() > bounds.right())
+                    rect.moveRight(bounds.right());
+            }
 
             if (iw > 0 && (rect.left() < bounds.left() || rect.right() > bounds.right())) {
                 // neither the flipped or pushed geometry fits inside the window, choose
                 // whichever side (left vs. right) fits larger part of the popup
-                if (rect.left() < bounds.left() && bounds.left() + rect.width() <= bounds.right())
-                    rect.moveLeft(bounds.left());
-                else if (rect.right() > bounds.right() && bounds.right() - rect.width() >= bounds.left())
-                    rect.moveRight(bounds.right());
+                if (allowHorizontalMove && allowHorizontalFlip) {
+                    if (rect.left() < bounds.left() && bounds.left() + rect.width() <= bounds.right())
+                        rect.moveLeft(bounds.left());
+                    else if (rect.right() > bounds.right() && bounds.right() - rect.width() >= bounds.left())
+                        rect.moveRight(bounds.right());
+                }
 
                 // as a last resort, adjust the width to fit the window
-                if (rect.left() < bounds.left()) {
-                    rect.setLeft(bounds.left());
-                    widthAdjusted = true;
-                }
-                if (rect.right() > bounds.right()) {
-                    rect.setRight(bounds.right());
-                    widthAdjusted = true;
+                if (allowHorizontalResize) {
+                    if (rect.left() < bounds.left()) {
+                        rect.setLeft(bounds.left());
+                        widthAdjusted = true;
+                    }
+                    if (rect.right() > bounds.right()) {
+                        rect.setRight(bounds.right());
+                        widthAdjusted = true;
+                    }
                 }
             } else if (iw > 0 && rect.left() >= bounds.left() && rect.right() <= bounds.right()
                        && iw != w) {
@@ -629,19 +675,23 @@ void QQuickPopupPrivate::reposition()
             if (ih > 0 && (rect.top() < bounds.top() || rect.bottom() > bounds.bottom())) {
                 // neither the flipped or pushed geometry fits inside the window, choose
                 // whichever side (above vs. below) fits larger part of the popup
-                if (rect.top() < bounds.top() && bounds.top() + rect.height() <= bounds.bottom())
-                    rect.moveTop(bounds.top());
-                else if (rect.bottom() > bounds.bottom() && bounds.bottom() - rect.height() >= bounds.top())
-                    rect.moveBottom(bounds.bottom());
+                if (allowVerticalMove && allowVerticalFlip) {
+                    if (rect.top() < bounds.top() && bounds.top() + rect.height() <= bounds.bottom())
+                        rect.moveTop(bounds.top());
+                    else if (rect.bottom() > bounds.bottom() && bounds.bottom() - rect.height() >= bounds.top())
+                        rect.moveBottom(bounds.bottom());
+                }
 
                 // as a last resort, adjust the height to fit the window
-                if (rect.top() < bounds.top()) {
-                    rect.setTop(bounds.top());
-                    heightAdjusted = true;
-                }
-                if (rect.bottom() > bounds.bottom()) {
-                    rect.setBottom(bounds.bottom());
-                    heightAdjusted = true;
+                if (allowVerticalResize) {
+                    if (rect.top() < bounds.top()) {
+                        rect.setTop(bounds.top());
+                        heightAdjusted = true;
+                    }
+                    if (rect.bottom() > bounds.bottom()) {
+                        rect.setBottom(bounds.bottom());
+                        heightAdjusted = true;
+                    }
                 }
             } else if (ih > 0 && rect.top() >= bounds.top() && rect.bottom() <= bounds.bottom()
                        && ih != h) {
@@ -664,10 +714,20 @@ void QQuickPopupPrivate::reposition()
         emit q->yChanged();
     }
 
-    if (widthAdjusted && rect.width() > 0)
+    if (!hasWidth && widthAdjusted && rect.width() > 0)
         popupItem->setWidth(rect.width());
-    if (heightAdjusted && rect.height() > 0)
+    if (!hasHeight && heightAdjusted && rect.height() > 0)
         popupItem->setHeight(rect.height());
+}
+
+void QQuickPopupPrivate::resizeOverlay()
+{
+    if (!dimmer)
+        return;
+
+    qreal w = window ? window->width() : 0;
+    qreal h = window ? window->height() : 0;
+    dimmer->setSize(QSizeF(w, h));
 }
 
 void QQuickPopupPositioner::removeAncestorListeners(QQuickItem *item)
@@ -710,40 +770,41 @@ bool QQuickPopupPositioner::isAncestor(QQuickItem *item) const
 }
 
 QQuickPopupTransitionManager::QQuickPopupTransitionManager(QQuickPopupPrivate *popup)
-    : QQuickTransitionManager()
-    , state(Off)
-    , popup(popup)
+    : QQuickTransitionManager(), popup(popup)
 {
 }
 
 void QQuickPopupTransitionManager::transitionEnter()
 {
-    if (state == Enter && isRunning())
+    if (popup->transitionState == QQuickPopupPrivate::ExitTransition)
+        cancel();
+
+    if (!popup->prepareEnterTransition())
         return;
 
-    state = Enter;
-    popup->prepareEnterTransition();
-    transition(popup->enterActions, popup->enter, popup->q_func());
+    if (popup->window)
+        transition(popup->enterActions, popup->enter, popup->q_func());
+    else
+        finished();
 }
 
 void QQuickPopupTransitionManager::transitionExit()
 {
-    if (state == Exit && isRunning())
+    if (!popup->prepareExitTransition())
         return;
 
-    state = Exit;
-    popup->prepareExitTransition();
-    transition(popup->exitActions, popup->exit, popup->q_func());
+    if (popup->window)
+        transition(popup->exitActions, popup->exit, popup->q_func());
+    else
+        finished();
 }
 
 void QQuickPopupTransitionManager::finished()
 {
-    if (state == Enter)
+    if (popup->transitionState == QQuickPopupPrivate::EnterTransition)
         popup->finalizeEnterTransition();
-    else if (state == Exit)
+    else if (popup->transitionState == QQuickPopupPrivate::ExitTransition)
         popup->finalizeExitTransition();
-
-    state = Off;
 }
 
 QQuickPopup::QQuickPopup(QObject *parent)
@@ -763,8 +824,7 @@ QQuickPopup::QQuickPopup(QQuickPopupPrivate &dd, QObject *parent)
 QQuickPopup::~QQuickPopup()
 {
     Q_D(QQuickPopup);
-    d->setWindow(nullptr);
-    d->positioner.setParentItem(nullptr);
+    setParentItem(nullptr);
     delete d->popupItem;
 }
 
@@ -772,36 +832,32 @@ QQuickPopup::~QQuickPopup()
     \qmlmethod void QtQuick.Controls::Popup::open()
 
     Opens the popup.
+
+    \sa visible
 */
 void QQuickPopup::open()
 {
-    Q_D(QQuickPopup);
-    if (d->visible)
-        return;
-
-    if (d->complete)
-        d->transitionManager.transitionEnter();
+    setVisible(true);
 }
 
 /*!
     \qmlmethod void QtQuick.Controls::Popup::close()
 
     Closes the popup.
+
+    \sa visible
 */
 void QQuickPopup::close()
 {
-    Q_D(QQuickPopup);
-    if (!d->visible)
-        return;
-
-    if (d->complete)
-        d->transitionManager.transitionExit();
+    setVisible(false);
 }
 
 /*!
     \qmlproperty real QtQuick.Controls::Popup::x
 
     This property holds the x-coordinate of the popup.
+
+    \sa y, z
 */
 qreal QQuickPopup::x() const
 {
@@ -819,6 +875,8 @@ void QQuickPopup::setX(qreal x)
     \qmlproperty real QtQuick.Controls::Popup::y
 
     This property holds the y-coordinate of the popup.
+
+    \sa x, z
 */
 qreal QQuickPopup::y() const
 {
@@ -862,7 +920,14 @@ void QQuickPopup::setPosition(const QPointF &pos)
     \qmlproperty real QtQuick.Controls::Popup::z
 
     This property holds the z-value of the popup. Z-value determines
-    the stacking order of popups. The default z-value is \c 0.
+    the stacking order of popups.
+
+    If two visible popups have the same z-value, the last one that
+    was opened will be on top.
+
+    The default z-value is \c 0.
+
+    \sa x, y
 */
 qreal QQuickPopup::z() const
 {
@@ -893,13 +958,20 @@ qreal QQuickPopup::width() const
 void QQuickPopup::setWidth(qreal width)
 {
     Q_D(QQuickPopup);
+    d->hasWidth = true;
     d->popupItem->setWidth(width);
 }
 
 void QQuickPopup::resetWidth()
 {
     Q_D(QQuickPopup);
+    if (!d->hasWidth)
+        return;
+
+    d->hasWidth = false;
     d->popupItem->resetWidth();
+    if (d->popupItem->isVisible())
+        d->reposition();
 }
 
 /*!
@@ -916,13 +988,20 @@ qreal QQuickPopup::height() const
 void QQuickPopup::setHeight(qreal height)
 {
     Q_D(QQuickPopup);
+    d->hasHeight = true;
     d->popupItem->setHeight(height);
 }
 
 void QQuickPopup::resetHeight()
 {
     Q_D(QQuickPopup);
+    if (!d->hasHeight)
+        return;
+
+    d->hasHeight = false;
     d->popupItem->resetHeight();
+    if (d->popupItem->isVisible())
+        d->reposition();
 }
 
 /*!
@@ -1013,7 +1092,8 @@ void QQuickPopup::setContentHeight(qreal height)
     \qmlproperty real QtQuick.Controls::Popup::availableWidth
     \readonly
 
-    This property holds the width available after deducting horizontal padding.
+    This property holds the width available to the \l contentItem after
+    deducting horizontal padding from the \l {Item::}{width} of the popup.
 
     \sa padding, leftPadding, rightPadding
 */
@@ -1027,7 +1107,8 @@ qreal QQuickPopup::availableWidth() const
     \qmlproperty real QtQuick.Controls::Popup::availableHeight
     \readonly
 
-    This property holds the height available after deducting vertical padding.
+    This property holds the height available to the \l contentItem after
+    deducting vertical padding from the \l {Item::}{height} of the popup.
 
     \sa padding, topPadding, bottomPadding
 */
@@ -1203,6 +1284,8 @@ void QQuickPopup::resetBottomMargin()
 
     This property holds the default padding.
 
+    \include qquickpopup-padding.qdocinc
+
     \sa availableWidth, availableHeight, topPadding, leftPadding, rightPadding, bottomPadding
 */
 qreal QQuickPopup::padding() const
@@ -1227,6 +1310,8 @@ void QQuickPopup::resetPadding()
     \qmlproperty real QtQuick.Controls::Popup::topPadding
 
     This property holds the top padding.
+
+    \include qquickpopup-padding.qdocinc
 
     \sa padding, bottomPadding, availableHeight
 */
@@ -1253,6 +1338,8 @@ void QQuickPopup::resetTopPadding()
 
     This property holds the left padding.
 
+    \include qquickpopup-padding.qdocinc
+
     \sa padding, rightPadding, availableWidth
 */
 qreal QQuickPopup::leftPadding() const
@@ -1278,6 +1365,8 @@ void QQuickPopup::resetLeftPadding()
 
     This property holds the right padding.
 
+    \include qquickpopup-padding.qdocinc
+
     \sa padding, leftPadding, availableWidth
 */
 qreal QQuickPopup::rightPadding() const
@@ -1302,6 +1391,8 @@ void QQuickPopup::resetRightPadding()
     \qmlproperty real QtQuick.Controls::Popup::bottomPadding
 
     This property holds the bottom padding.
+
+    \include qquickpopup-padding.qdocinc
 
     \sa padding, topPadding, availableHeight
 */
@@ -1400,17 +1491,23 @@ void QQuickPopup::setParentItem(QQuickItem *parent)
     if (d->parentItem == parent)
         return;
 
-    if (d->parentItem)
+    if (d->parentItem) {
         QObjectPrivate::disconnect(d->parentItem, &QQuickItem::windowChanged, d, &QQuickPopupPrivate::setWindow);
+        QQuickItemPrivate::get(d->parentItem)->removeItemChangeListener(d, QQuickItemPrivate::Destroyed);
+    }
     d->parentItem = parent;
     if (d->positioner.parentItem())
         d->positioner.setParentItem(parent);
     if (parent) {
         QObjectPrivate::connect(parent, &QQuickItem::windowChanged, d, &QQuickPopupPrivate::setWindow);
+        QQuickItemPrivate::get(d->parentItem)->addItemChangeListener(d, QQuickItemPrivate::Destroyed);
+
         QQuickControlPrivate *p = QQuickControlPrivate::get(d->popupItem);
         p->resolveFont();
         if (QQuickApplicationWindow *window = qobject_cast<QQuickApplicationWindow *>(parent->window()))
             p->updateLocale(window->locale(), false); // explicit=false
+    } else {
+        close();
     }
     d->setWindow(parent ? parent->window() : nullptr);
     emit parentChanged();
@@ -1424,6 +1521,14 @@ void QQuickPopup::setParentItem(QQuickItem *parent)
     \note If the background item has no explicit size specified, it automatically
           follows the popup's size. In most cases, there is no need to specify
           width or height for a background item.
+
+    \note Most popups use the implicit size of the background item to calculate
+    the implicit size of the popup itself. If you replace the background item
+    with a custom one, you should also consider providing a sensible implicit
+    size for it (unless it is an item like \l Image which has its own implicit
+    size).
+
+    \sa {Customizing Popup}
 */
 QQuickItem *QQuickPopup::background() const
 {
@@ -1450,6 +1555,17 @@ void QQuickPopup::setBackground(QQuickItem *background)
     popup is made visible, the content item is automatically reparented to
     the \l {ApplicationWindow::overlay}{overlay item} of its application
     window.
+
+    \note The content item is automatically resized to fit within the
+    \l padding of the popup.
+
+    \note Most popups use the implicit size of the content item to calculate
+    the implicit size of the popup itself. If you replace the content item
+    with a custom one, you should also consider providing a sensible implicit
+    size for it (unless it is an item like \l Text which has its own implicit
+    size).
+
+    \sa {Customizing Popup}
 */
 QQuickItem *QQuickPopup::contentItem() const
 {
@@ -1469,7 +1585,13 @@ void QQuickPopup::setContentItem(QQuickItem *item)
 
     This property holds the list of content data.
 
-    \sa Item::data
+    The list contains all objects that have been declared in QML as children
+    of the popup.
+
+    \note Unlike \c contentChildren, \c contentData does include non-visual QML
+    objects.
+
+    \sa Item::data, contentChildren
 */
 QQmlListProperty<QObject> QQuickPopup::contentData()
 {
@@ -1486,7 +1608,13 @@ QQmlListProperty<QObject> QQuickPopup::contentData()
 
     This property holds the list of content children.
 
-    \sa Item::children
+    The list contains all items that have been declared in QML as children
+    of the popup.
+
+    \note Unlike \c contentData, \c contentChildren does not include non-visual
+    QML objects.
+
+    \sa Item::children, contentData
 */
 QQmlListProperty<QQuickItem> QQuickPopup::contentChildren()
 {
@@ -1521,7 +1649,14 @@ void QQuickPopup::setClip(bool clip)
 /*!
     \qmlproperty bool QtQuick.Controls::Popup::focus
 
-    This property holds whether the popup has focus. The default value is \c false.
+    This property holds whether the popup wants focus.
+
+    When the popup actually receives focus, \l activeFocus will be \c true.
+    For more information, see \l {Keyboard Focus in Qt Quick}.
+
+    The default value is \c false.
+
+    \sa activeFocus
 */
 bool QQuickPopup::hasFocus() const
 {
@@ -1543,6 +1678,8 @@ void QQuickPopup::setFocus(bool focus)
     \readonly
 
     This property holds whether the popup has active focus.
+
+    \sa focus, {Keyboard Focus in Qt Quick}
 */
 bool QQuickPopup::hasActiveFocus() const
 {
@@ -1617,6 +1754,8 @@ void QQuickPopup::resetDim()
     \qmlproperty bool QtQuick.Controls::Popup::visible
 
     This property holds whether the popup is visible. The default value is \c false.
+
+    \sa open(), close()
 */
 bool QQuickPopup::isVisible() const
 {
@@ -1627,15 +1766,16 @@ bool QQuickPopup::isVisible() const
 void QQuickPopup::setVisible(bool visible)
 {
     Q_D(QQuickPopup);
-    if (d->visible == visible)
+    if (d->visible == visible && d->transitionState != QQuickPopupPrivate::ExitTransition)
         return;
 
-    d->visible = visible;
     if (d->complete) {
         if (visible)
             d->transitionManager.transitionEnter();
         else
             d->transitionManager.transitionExit();
+    } else {
+        d->visible = visible;
     }
 }
 
@@ -1825,13 +1965,6 @@ bool QQuickPopup::isComponentComplete() const
     return d->complete;
 }
 
-bool QQuickPopup::eventFilter(QObject *object, QEvent *event)
-{
-    if (QQuickWindow *window = qobject_cast<QQuickWindow *>(object))
-        return overlayEvent(window->contentItem(), event);
-    return false;
-}
-
 bool QQuickPopup::childMouseEventFilter(QQuickItem *child, QEvent *event)
 {
     Q_UNUSED(child);
@@ -1891,6 +2024,12 @@ void QQuickPopup::mouseDoubleClickEvent(QMouseEvent *event)
 
 void QQuickPopup::mouseUngrabEvent()
 {
+    QQuickOverlay *overlay = QQuickOverlay::overlay(window());
+    if (overlay) {
+        QQuickOverlayPrivate *p = QQuickOverlayPrivate::get(overlay);
+        if (p->mouseGrabberPopup == this)
+            p->mouseGrabberPopup = nullptr;
+    }
 }
 
 bool QQuickPopup::overlayEvent(QQuickItem *item, QEvent *event)

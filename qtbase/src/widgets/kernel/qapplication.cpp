@@ -1026,7 +1026,7 @@ bool QApplication::compressEvent(QEvent *event, QObject *receiver, QPostEventLis
     \property QApplication::autoMaximizeThreshold
     \since 4.4
     \brief defines a threshold for auto maximizing widgets
-
+    \deprecated
     \b{The auto maximize threshold is only available as part of Qt for
     Windows CE.}
 
@@ -1056,8 +1056,8 @@ bool QApplication::compressEvent(QEvent *event, QObject *receiver, QPostEventLis
     the WA_InputMethodEnabled attribute set, and is typically used to launch
     a virtual keyboard on devices which have very few or no keys.
 
-    \b{ The property only has an effect on platforms which use software input
-    panels, such as Windows CE.}
+    \b{ The property only has an effect on platforms that use software input
+    panels.}
 
     The default is platform dependent.
 */
@@ -1535,7 +1535,7 @@ void QApplicationPrivate::setPalette_helper(const QPalette &palette, const char*
 
     \note Some styles do not use the palette for all drawing, for instance, if
     they make use of native theme engines. This is the case for the Windows XP,
-    Windows Vista, and OS X styles.
+    Windows Vista, and \macos styles.
 
     \sa QWidget::setPalette(), palette(), QStyle::polish()
 */
@@ -3174,11 +3174,11 @@ bool QApplication::notify(QObject *receiver, QEvent *e)
                     key->accept();
                 else
                     key->ignore();
-                res = d->notify_helper(receiver, e);
                 QWidget *w = isWidget ? static_cast<QWidget *>(receiver) : 0;
 #ifndef QT_NO_GRAPHICSVIEW
                 QGraphicsWidget *gw = isGraphicsWidget ? static_cast<QGraphicsWidget *>(receiver) : 0;
 #endif
+                res = d->notify_helper(receiver, e);
 
                 if ((res && key->isAccepted())
                     /*
@@ -3927,12 +3927,7 @@ void QApplicationPrivate::openPopup(QWidget *popup)
 /*!
     Sets the kind of focus navigation Qt should use to \a mode.
 
-    This feature is available in Qt for Embedded Linux, and Windows CE
-    only.
-
-    \note On Windows CE this feature is disabled by default for touch device
-          mkspecs. To enable keypad navigation, build Qt with
-          QT_KEYPAD_NAVIGATION defined.
+    This feature is available in Qt for Embedded Linux only.
 
     \since 4.6
 
@@ -3946,11 +3941,7 @@ void QApplication::setNavigationMode(Qt::NavigationMode mode)
 /*!
     Returns what kind of focus navigation Qt is using.
 
-    This feature is available in Qt for Embedded Linux, and Windows CE only.
-
-    \note On Windows CE this feature is disabled by default for touch device
-          mkspecs. To enable keypad navigation, build Qt with
-          QT_KEYPAD_NAVIGATION defined.
+    This feature is available in Qt for Embedded Linux only.
 
     \since 4.6
 
@@ -4016,7 +4007,7 @@ bool QApplication::keypadNavigationEnabled()
 
     Currently this function does nothing on Qt for Embedded Linux.
 
-    On OS X, this works more at the application level and will cause the
+    On \macos, this works more at the application level and will cause the
     application icon to bounce in the dock.
 
     On Windows, this causes the window's taskbar entry to flash for a time. If

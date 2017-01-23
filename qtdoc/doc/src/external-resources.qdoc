@@ -233,7 +233,7 @@
 */
 
 /*!
-    \externalpage http://www.qt.io/qt-account/
+    \externalpage https://account.qt.io/
     \title Qt Account
 */
 
@@ -244,14 +244,6 @@
 /*!
     \externalpage http://doc.qt.io/emulator/index.html
     \title Emulator
-*/
-/*!
-    \externalpage http://wiki.qt.io/QtWebEngine
-    \title Qt WebEngine Wiki
-*/
-/*!
-    \externalpage http://wiki.qt.io/QtWebEngineOnWindows
-    \title Qt WebEngine on Windows
 */
 /*!
     \externalpage http://doc.qt.io/archives/qt-5.3/qtwebkit-index.html
@@ -280,4 +272,13 @@
 /*!
     \externalpage http://doc.qt.io/QtForDeviceCreation/qtee-about-b2qt.html
     \title Boot2Qt
+*/
+
+/*
+    This prevents autolinking of each occurrence of 'macOS'
+*/
+/*!
+    \externalpage nolink
+    \title macOS
+    \internal
 */

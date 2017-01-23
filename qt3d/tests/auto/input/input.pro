@@ -13,7 +13,11 @@ contains(QT_CONFIG, private_tests) {
         axis \
         action \
         abstractaxisinput \
+        actioninput \
         analogaxisinput \
         buttonaxisinput \
-        keyboardhandler
+        inputsequence \
+        inputchord \
+        keyboardhandler \
+        qabstractphysicaldevicebackendnode
 }

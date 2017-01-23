@@ -37,17 +37,18 @@
     \section1 Attached Properties
 
     \list
-        \li \l {accent-attached-prop}{\b accent} : color
-        \li \l {background-attached-prop}{\b background} : color
-        \li \l {foreground-attached-prop}{\b foreground} : color
-        \li \l {primary-attached-prop}{\b primary} : color
-        \li \l {theme-attached-prop}{\b theme} : enumeration
+        \li \l {material-accent-attached-prop}{\b accent} : color
+        \li \l {material-background-attached-prop}{\b background} : color
+        \li \l {material-elevation-attached-prop}{\b elevation} : int
+        \li \l {material-foreground-attached-prop}{\b foreground} : color
+        \li \l {material-primary-attached-prop}{\b primary} : color
+        \li \l {material-theme-attached-prop}{\b theme} : enumeration
     \endlist
 
     \section1 Attached Methods
 
     \list
-        \li color \l {color-attached-method}{\b color}(enumeration predefined)
+        \li color \l {material-color-attached-method}{\b color}(enumeration predefined, enumeration shade)
     \endlist
 
     \section1 Detailed Description
@@ -60,6 +61,9 @@
     \image qtquickcontrols2-material.png
     \caption The Material style in light and dark themes
 
+    To run an application with the Material style, see
+    \l {Using Styles in Qt Quick Controls 2}.
+
     \note The Material style is not a native Android style. The Material
     style is a 100% cross-platform Qt Quick Controls 2 style implementation that
     follows the Google Material Design Guidelines. The style runs on any
@@ -69,9 +73,9 @@
 
     \section2 Customization
 
-    The Material style allows customizing five attributes, \l {theme-attached-prop}{theme},
-    \l {primary-attached-prop}{primary}, \l {accent-attached-prop}{accent},
-    \l {foreground-attached-prop}{foreground}, and \l {background-attached-prop}{background}.
+    The Material style allows customizing five attributes, \l {material-theme-attached-prop}{theme},
+    \l {material-primary-attached-prop}{primary}, \l {material-accent-attached-prop}{accent},
+    \l {material-foreground-attached-prop}{foreground}, and \l {material-background-attached-prop}{background}.
 
     \image qtquickcontrols2-material-attributes.png
 
@@ -131,7 +135,8 @@
 
     In addition to specifying the attributes in QML, it is also possible to
     specify them via environment variables or in a \l {qtquickcontrols2-conf}
-    {configuration file}.
+    {configuration file}. Attributes specified in QML take precedence over all
+    other methods.
 
     \section3 Environment Variables
 
@@ -141,27 +146,24 @@
             \li Description
         \row
             \li \c QT_QUICK_CONTROLS_MATERIAL_THEME
-            \li The value can be one of the available \l {theme-attached-prop}{themes},
+            \li The value can be one of the available \l {material-theme-attached-prop}{themes},
                 for example \c "Dark".
         \row
             \li \c QT_QUICK_CONTROLS_MATERIAL_ACCENT
             \li The value can be any \l {colorbasictypedocs}{color}, but it is recommended
-                to use one of the \l {Pre-defined Colors}{pre-defined colors}, for example
-                for example \c "Teal".
+                to use one of the \l {pre-defined Material colors}, for example \c "Teal".
         \row
             \li \c QT_QUICK_CONTROLS_MATERIAL_PRIMARY
             \li The value can be any \l {colorbasictypedocs}{color}, but it is recommended
-                to use one of the \l {Pre-defined Colors}{pre-defined colors}, for example
-                for example \c "BlueGrey".
+                to use one of the \l {pre-defined Material colors}, for example \c "BlueGrey".
         \row
             \li \c QT_QUICK_CONTROLS_MATERIAL_FOREGROUND
             \li The value can be any \l {colorbasictypedocs}{color}, or one of the
-                \l {Pre-defined Colors}{pre-defined colors}.
-
+                \l {pre-defined Material colors}.
         \row
             \li \c QT_QUICK_CONTROLS_MATERIAL_BACKGROUND
             \li The value can be any \l {colorbasictypedocs}{color}, or one of the
-                \l {Pre-defined Colors}{pre-defined colors}.
+                \l {pre-defined Material colors}.
     \endtable
 
     \section2 Dependency
@@ -179,7 +181,7 @@
     style-specific tweaks can be applied without creating a hard dependency to
     a style.
 
-    \section2 Pre-defined Colors
+    \section2 Pre-defined Material Colors
 
     Even though primary and accent can be any \l {colorbasictypedocs}{color}, it
     is recommended to use one of the pre-defined colors that have been designed
@@ -206,25 +208,69 @@
     \value Material.Grey \stylecolor {#9E9E9E} {}
     \value Material.BlueGrey \stylecolor {#607D8B} {}
 
+    When the dark theme is in use, different \l {Pre-defined Shades}{shades} of
+    the pre-defined colors are used by default:
+
+    \value Material.Red \stylecolor {#EF9A9A} {}
+    \value Material.Pink \stylecolor {#F48FB1} {(default accent)}
+    \value Material.Purple \stylecolor {#CE93D8} {}
+    \value Material.DeepPurple \stylecolor {#B39DDB} {}
+    \value Material.Indigo \stylecolor {#9FA8DA} {(default primary)}
+    \value Material.Blue \stylecolor {#90CAF9} {}
+    \value Material.LightBlue \stylecolor {#81D4FA} {}
+    \value Material.Cyan \stylecolor {#80DEEA} {}
+    \value Material.Teal \stylecolor {#80CBC4} {}
+    \value Material.Green \stylecolor {#A5D6A7} {}
+    \value Material.LightGreen \stylecolor {#C5E1A5} {}
+    \value Material.Lime \stylecolor {#E6EE9C} {}
+    \value Material.Yellow \stylecolor {#FFF59D} {}
+    \value Material.Amber \stylecolor {#FFE082} {}
+    \value Material.Orange \stylecolor {#FFCC80} {}
+    \value Material.DeepOrange \stylecolor {#FFAB91} {}
+    \value Material.Brown \stylecolor {#BCAAA4} {}
+    \value Material.Grey \stylecolor {#EEEEEE} {}
+    \value Material.BlueGrey \stylecolor {#B0BEC5} {}
+
+    \section2 Pre-defined Shades
+
+    There are several different
+    \l {https://material.google.com/style/color.html#color-color-palette}{shades}
+    of each \l {Pre-defined Material Colors}{pre-defined color} that can be passed
+    to the \l {material-color-attached-method}{Material.color()} function:
+    \value Material.Shade50
+    \value Material.Shade100
+    \value Material.Shade200
+    \value Material.Shade300
+    \value Material.Shade400
+    \value Material.Shade500
+    \value Material.Shade600
+    \value Material.Shade700
+    \value Material.Shade800
+    \value Material.Shade900
+    \value Material.ShadeA100
+    \value Material.ShadeA200
+    \value Material.ShadeA400
+    \value Material.ShadeA700
+
     \b {See also} \l {Default Style}, \l {Universal Style}
 
     \section1 Attached Property Documentation
 
-    \styleproperty {Material.accent} {color} {accent-attached-prop}
-    \target accent-attached-prop
+    \styleproperty {Material.accent} {color} {material-accent-attached-prop}
+    \target material-accent-attached-prop
     This attached property holds the accent color of the theme. The property
     can be attached to any window or item. The value is propagated to children.
 
     The default value is \c Material.Pink.
 
     \note Even though the accent can be any \l {colorbasictypedocs}{color}, it is
-    recommended to use one of the \l {pre-defined colors} that have been designed
-    to work well with the rest of the Material style palette.
+    recommended to use one of the \l {pre-defined Material colors} that have been
+    designed to work well with the rest of the Material style palette.
 
     \endstyleproperty
 
-    \styleproperty {Material.background} {color} {background-attached-prop}
-    \target background-attached-prop
+    \styleproperty {Material.background} {color} {material-background-attached-prop}
+    \target material-background-attached-prop
     This attached property holds the background color of the theme. The property
     can be attached to any window or item. The value is propagated to children.
 
@@ -232,8 +278,18 @@
 
     \endstyleproperty
 
-    \styleproperty {Material.foreground} {color} {foreground-attached-prop}
-    \target foreground-attached-prop
+    \styleproperty {Material.elevation} {int} {material-elevation-attached-prop}
+    \target material-elevation-attached-prop
+    This attached property holds the elevation of the control. The higher the
+    elevation, the deeper the shadow. The property can be attached to any control,
+    but not all controls visualize elevation.
+
+    The default value is control-specific.
+
+    \endstyleproperty
+
+    \styleproperty {Material.foreground} {color} {material-foreground-attached-prop}
+    \target material-foreground-attached-prop
     This attached property holds the foreground color of the theme. The property
     can be attached to any window or item. The value is propagated to children.
 
@@ -241,21 +297,21 @@
 
     \endstyleproperty
 
-    \styleproperty {Material.primary} {color} {primary-attached-prop}
-    \target primary-attached-prop
+    \styleproperty {Material.primary} {color} {material-primary-attached-prop}
+    \target material-primary-attached-prop
     This attached property holds the primary color of the theme. The property
     can be attached to any window or item. The value is propagated to children.
 
     The default value is \c Material.Indigo.
 
     \note Even though the primary can be any \l {colorbasictypedocs}{color}, it is
-    recommended to use one of the \l {pre-defined colors} that have been designed
-    to work well with the rest of the Material style palette.
+    recommended to use one of the \l {pre-defined Material colors} that have been
+    designed to work well with the rest of the Material style palette.
 
     \endstyleproperty
 
-    \styleproperty {Material.theme} {enumeration} {theme-attached-prop}
-    \target theme-attached-prop
+    \styleproperty {Material.theme} {enumeration} {material-theme-attached-prop}
+    \target material-theme-attached-prop
     This attached property holds whether the theme is light or dark. The property
     can be attached to any window or item. The value is propagated to children.
 
@@ -267,10 +323,12 @@
 
     \section1 Attached Method Documentation
 
-    \stylemethod {color} {color} {enumeration} {predefined} {color-attached-method}
-    \target color-attached-method
-    This attached method returns the color value of the specified \l {pre-defined colors}
-    {pre-defined color}.
+    \stylemethod2 {color} {color} {enumeration} {predefined} {enumeration} {shade} {material-color-attached-method}
+    \target material-color-attached-method
+    This attached method returns the effective color value of the specified
+    \l {pre-defined Material colors}{pre-defined Material color} combined with
+    the given \l {pre-defined shades}{shade}. If omitted, the shade argument
+    defaults to \c Material.Shade500.
 
     \qml
     import QtQuick 2.0
@@ -281,7 +339,7 @@
     }
     \endqml
 
-    \endstylemethod
+    \endstylemethod2
 
     \section1 Related Information
 

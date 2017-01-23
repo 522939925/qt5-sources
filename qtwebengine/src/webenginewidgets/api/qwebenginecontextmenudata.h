@@ -40,10 +40,10 @@
 #ifndef QWEBENGINECONTEXTDATA_H
 #define QWEBENGINECONTEXTDATA_H
 
-#include <qtwebenginewidgetsglobal.h>
-#include <QtCore/QPoint>
-#include <QtCore/QString>
-#include <QtCore/QUrl>
+#include <QtWebEngineWidgets/qtwebenginewidgetsglobal.h>
+#include <QtCore/qpoint.h>
+#include <QtCore/qstring.h>
+#include <QtCore/qurl.h>
 
 namespace QtWebEngineCore {
 class WebEngineContextMenuData;

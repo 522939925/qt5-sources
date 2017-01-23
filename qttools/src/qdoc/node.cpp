@@ -73,6 +73,63 @@ void Node::initialize()
     goals_.insert("namespace", Node::Namespace);
 }
 
+bool Node::nodeNameLessThan(const Node *n1, const Node *n2)
+{
+    if (n1->location().filePath() < n2->location().filePath())
+        return true;
+    else if (n1->location().filePath() > n2->location().filePath())
+        return false;
+
+    if (n1->type() < n2->type())
+        return true;
+    else if (n1->type() > n2->type())
+        return false;
+
+    if (n1->name() < n2->name())
+        return true;
+    else if (n1->name() > n2->name())
+        return false;
+
+    if (n1->access() < n2->access())
+        return true;
+    else if (n1->access() > n2->access())
+        return false;
+
+    if (n1->type() == Node::Function && n2->type() == Node::Function) {
+        const FunctionNode* f1 = static_cast<const FunctionNode*>(n1);
+        const FunctionNode* f2 = static_cast<const FunctionNode*>(n2);
+
+        if (f1->isConst() < f2->isConst())
+            return true;
+        else if (f1->isConst() > f2->isConst())
+            return false;
+
+        if (f1->signature(false) < f2->signature(false))
+            return true;
+        else if (f1->signature(false) > f2->signature(false))
+            return false;
+    }
+
+    if (n1->isDocumentNode() && n2->isDocumentNode()) {
+        const DocumentNode* f1 = static_cast<const DocumentNode*>(n1);
+        const DocumentNode* f2 = static_cast<const DocumentNode*>(n2);
+        if (f1->fullTitle() < f2->fullTitle())
+            return true;
+        else if (f1->fullTitle() > f2->fullTitle())
+            return false;
+    }
+    else if (n1->isCollectionNode() && n2->isCollectionNode()) {
+        const CollectionNode* f1 = static_cast<const CollectionNode*>(n1);
+        const CollectionNode* f2 = static_cast<const CollectionNode*>(n2);
+        if (f1->fullTitle() < f2->fullTitle())
+            return true;
+        else if (f1->fullTitle() > f2->fullTitle())
+            return false;
+    }
+
+    return false;
+}
+
 /*!
   Increment the number of property groups seen in the current
   file, and return the new value.
@@ -2376,7 +2433,7 @@ QString PropertyNode::qualifiedDataType() const
 }
 
 bool QmlTypeNode::qmlOnly = false;
-QMultiMap<QString,Node*> QmlTypeNode::inheritedBy;
+QMultiMap<const Node*, Node*> QmlTypeNode::inheritedBy;
 
 /*!
   Constructs a Qml class node. The new node has the given
@@ -2422,18 +2479,18 @@ void QmlTypeNode::terminate()
   Record the fact that QML class \a base is inherited by
   QML class \a sub.
  */
-void QmlTypeNode::addInheritedBy(const QString& base, Node* sub)
+void QmlTypeNode::addInheritedBy(const Node *base, Node* sub)
 {
     if (sub->isInternal())
         return;
-    if (inheritedBy.constFind(base,sub) == inheritedBy.constEnd())
-        inheritedBy.insert(base,sub);
+    if (!inheritedBy.contains(base, sub))
+        inheritedBy.insert(base, sub);
 }
 
 /*!
   Loads the list \a subs with the nodes of all the subclasses of \a base.
  */
-void QmlTypeNode::subclasses(const QString& base, NodeList& subs)
+void QmlTypeNode::subclasses(const Node *base, NodeList &subs)
 {
     subs.clear();
     if (inheritedBy.count(base) > 0) {
@@ -2441,13 +2498,6 @@ void QmlTypeNode::subclasses(const QString& base, NodeList& subs)
     }
 }
 
-QmlTypeNode* QmlTypeNode::qmlBaseNode()
-{
-    if (!qmlBaseNode_ && !qmlBaseName_.isEmpty()) {
-        qmlBaseNode_ = QDocDatabase::qdocDB()->findQmlType(qmlBaseName_);
-    }
-    return qmlBaseNode_;
-}
 
 /*!
   If this QML type node has a base type node,

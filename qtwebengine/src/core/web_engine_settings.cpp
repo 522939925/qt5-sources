@@ -44,6 +44,7 @@
 #include "type_conversion.h"
 
 #include "base/command_line.h"
+#include "chrome/common/chrome_switches.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/web_preferences.h"
@@ -232,11 +233,13 @@ void WebEngineSettings::initDefaults(bool offTheRecord)
                 !commandLine->HasSwitch(switches::kDisableExperimentalWebGL);
         bool accelerated2dCanvas = content::GpuProcessHost::gpu_enabled() &&
                 !commandLine->HasSwitch(switches::kDisableAccelerated2dCanvas);
+        bool allowRunningInsecureContent = commandLine->HasSwitch(switches::kAllowRunningInsecureContent);
         s_defaultAttributes.insert(ScrollAnimatorEnabled, smoothScrolling);
         s_defaultAttributes.insert(WebGLEnabled, webGL);
         s_defaultAttributes.insert(Accelerated2dCanvasEnabled, accelerated2dCanvas);
         s_defaultAttributes.insert(AutoLoadIconsForPage, true);
         s_defaultAttributes.insert(TouchIconsEnabled, false);
+        s_defaultAttributes.insert(AllowRunningInsecureContent, allowRunningInsecureContent);
     }
     if (offTheRecord)
         m_attributes.insert(LocalStorageEnabled, false);
@@ -301,6 +304,7 @@ void WebEngineSettings::applySettingsToWebPreferences(content::WebPreferences *p
     prefs->javascript_can_access_clipboard = testAttribute(JavascriptCanAccessClipboard);
     prefs->tabs_to_links = testAttribute(LinksIncludedInFocusChain);
     prefs->local_storage_enabled = testAttribute(LocalStorageEnabled);
+    prefs->databases_enabled = testAttribute(LocalStorageEnabled);
     prefs->allow_universal_access_from_file_urls = testAttribute(LocalContentCanAccessRemoteUrls);
     prefs->xss_auditor_enabled = testAttribute(XSSAuditingEnabled);
     prefs->spatial_navigation_enabled = testAttribute(SpatialNavigationEnabled);
@@ -312,6 +316,7 @@ void WebEngineSettings::applySettingsToWebPreferences(content::WebPreferences *p
     prefs->fullscreen_supported = testAttribute(FullScreenSupportEnabled);
     prefs->accelerated_2d_canvas_enabled = testAttribute(Accelerated2dCanvasEnabled);
     prefs->experimental_webgl_enabled = testAttribute(WebGLEnabled);
+    prefs->allow_running_insecure_content = testAttribute(AllowRunningInsecureContent);
 
     // Fonts settings.
     prefs->standard_font_family_map[content::kCommonScript] = toString16(fontFamily(StandardFont));

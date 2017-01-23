@@ -56,17 +56,6 @@ QT_BEGIN_NAMESPACE
     RangeSlider is used to select a range specified by two values, by sliding
     each handle along a track.
 
-    \table
-    \row \li \image qtquickcontrols2-rangeslider-normal.png
-         \li A range slider in its normal state.
-    \row \li \image qtquickcontrols2-rangeslider-first-handle-focused.png
-         \li A range slider whose first handle has active focus.
-    \row \li \image qtquickcontrols2-rangeslider-second-handle-focused.png
-         \li A range slider whose second handle has active focus.
-    \row \li \image qtquickcontrols2-rangeslider-disabled.png
-         \li A range slider that is disabled.
-    \endtable
-
     \code
     RangeSlider {
         first.value: 0.25
@@ -226,7 +215,7 @@ void QQuickRangeSliderNode::setHandle(QQuickItem *handle)
     if (d->handle == handle)
         return;
 
-    delete d->handle;
+    QQuickControlPrivate::get(d->slider)->deleteDelegate(d->handle);
     d->handle = handle;
     if (handle) {
         if (!handle->parentItem())
@@ -322,7 +311,7 @@ static qreal valueAt(const QQuickRangeSlider *slider, qreal position)
 
 static qreal snapPosition(const QQuickRangeSlider *slider, qreal position)
 {
-    const qreal range = slider->from() + (slider->to() - slider->from());
+    const qreal range = slider->to() - slider->from();
     if (qFuzzyIsNull(range))
         return position;
 

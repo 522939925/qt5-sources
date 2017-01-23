@@ -94,9 +94,6 @@ void QDeclarativePlaylistItem::setSource(const QUrl &source)
     item's source URL can be accessed using the \c source role.
 
     \qml
-    import QtQuick 2.0
-    import QtMultimedia 5.6
-
     Item {
         width: 400;
         height: 300;
@@ -513,7 +510,7 @@ bool QDeclarativePlaylist::removeItem(int index)
 /*!
     \qmlmethod bool QtMultimedia::Playlist::removeItems(int start, int end)
 
-    Removes items in the playlist from \a start to \end inclusive.
+    Removes items in the playlist from \a start to \a end inclusive.
 
     Returns true if the items are removed successfully.
 
@@ -597,7 +594,7 @@ void QDeclarativePlaylist::componentComplete()
 }
 
 /*!
-    \qmlsignal QtMultimedia::Audio::itemAboutToBeInserted(start, end)
+    \qmlsignal QtMultimedia::Playlist::itemAboutToBeInserted(start, end)
 
     This signal is emitted when items are to be inserted into the playlist at \a start and ending at
     \a end.
@@ -606,7 +603,7 @@ void QDeclarativePlaylist::componentComplete()
 */
 
 /*!
-    \qmlsignal QtMultimedia::Audio::itemInserted(start, end)
+    \qmlsignal QtMultimedia::Playlist::itemInserted(start, end)
 
     This signal is emitted after items have been inserted into the playlist. The new items are those
     between \a start and \a end inclusive.
@@ -615,7 +612,7 @@ void QDeclarativePlaylist::componentComplete()
 */
 
 /*!
-    \qmlsignal QtMultimedia::Audio::itemAboutToBeRemoved(start, end)
+    \qmlsignal QtMultimedia::Playlist::itemAboutToBeRemoved(start, end)
 
     This signal emitted when items are to be deleted from the playlist at \a start and ending at
     \a end.
@@ -624,7 +621,7 @@ void QDeclarativePlaylist::componentComplete()
 */
 
 /*!
-    \qmlsignal QtMultimedia::Audio::itemRemoved(start, end)
+    \qmlsignal QtMultimedia::Playlist::itemRemoved(start, end)
 
     This signal is emitted after items have been removed from the playlist. The removed items are
     those between \a start and \a end inclusive.
@@ -633,7 +630,7 @@ void QDeclarativePlaylist::componentComplete()
 */
 
 /*!
-    \qmlsignal QtMultimedia::Audio::itemChanged(start, end)
+    \qmlsignal QtMultimedia::Playlist::itemChanged(start, end)
 
     This signal is emitted after items have been changed in the playlist between \a start and
     \a end positions inclusive.
@@ -642,7 +639,7 @@ void QDeclarativePlaylist::componentComplete()
 */
 
 /*!
-    \qmlsignal QtMultimedia::Audio::loaded()
+    \qmlsignal QtMultimedia::Playlist::loaded()
 
     This signal is emitted when the playlist loading succeeded.
 
@@ -650,7 +647,7 @@ void QDeclarativePlaylist::componentComplete()
 */
 
 /*!
-    \qmlsignal QtMultimedia::Audio::loadFailed()
+    \qmlsignal QtMultimedia::Playlist::loadFailed()
 
     This signal is emitted when the playlist loading failed. \l error and \l errorString can be
     checked for more information on the failure.

@@ -788,8 +788,10 @@ void QAbstractItemView::setSelectionModel(QItemSelectionModel *selectionModel)
     QModelIndex oldCurrentIndex;
 
     if (d->selectionModel) {
-        oldSelection = d->selectionModel->selection();
-        oldCurrentIndex = d->selectionModel->currentIndex();
+        if (d->selectionModel->model() == selectionModel->model()) {
+            oldSelection = d->selectionModel->selection();
+            oldCurrentIndex = d->selectionModel->currentIndex();
+        }
 
         disconnect(d->selectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)),
                    this, SLOT(selectionChanged(QItemSelection,QItemSelection)));
@@ -2604,12 +2606,11 @@ QModelIndexList QAbstractItemView::selectedIndexes() const
     QModelIndexList indexes;
     if (d->selectionModel) {
         indexes = d->selectionModel->selectedIndexes();
-        QList<QModelIndex>::iterator it = indexes.begin();
-        while (it != indexes.end())
-            if (isIndexHidden(*it))
-                it = indexes.erase(it);
-            else
-                ++it;
+        auto isHidden = [this](const QModelIndex &idx) {
+            return isIndexHidden(idx);
+        };
+        const auto end = indexes.end();
+        indexes.erase(std::remove_if(indexes.begin(), end, isHidden), end);
     }
     return indexes;
 }
@@ -3671,6 +3672,9 @@ void QAbstractItemView::startDrag(Qt::DropActions supportedActions)
             defaultDropAction = Qt::CopyAction;
         if (drag->exec(supportedActions, defaultDropAction) == Qt::MoveAction)
             d->clearOrRemove();
+        // Reset the drop indicator
+        d->dropIndicatorRect = QRect();
+        d->dropIndicatorPosition = OnItem;
     }
 }
 #endif // QT_NO_DRAGANDDROP
@@ -3869,7 +3873,7 @@ void QAbstractItemView::doAutoScroll()
     int horizontalValue = horizontalScroll->value();
 
     QPoint pos = d->viewport->mapFromGlobal(QCursor::pos());
-    QRect area = static_cast<QAbstractItemView*>(d->viewport)->d_func()->clipRect(); // access QWidget private by bending C++ rules
+    QRect area = QWidgetPrivate::get(d->viewport)->clipRect();
 
     // do the scrolling if we are in the scroll margins
     if (pos.y() - area.top() < margin)
@@ -4321,6 +4325,12 @@ const QEditorInfo & QAbstractItemViewPrivate::editorForIndex(const QModelIndex &
         return nullInfo;
 
     return it.value();
+}
+
+bool QAbstractItemViewPrivate::hasEditor(const QModelIndex &index) const
+{
+    // Search's implicit cast (QModelIndex to QPersistentModelIndex) is slow; use cheap pre-test to avoid when we can.
+    return !indexEditorHash.isEmpty() && indexEditorHash.contains(index);
 }
 
 QModelIndex QAbstractItemViewPrivate::indexForEditor(QWidget *editor) const

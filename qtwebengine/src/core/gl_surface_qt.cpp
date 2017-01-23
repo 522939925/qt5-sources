@@ -87,6 +87,10 @@ void* g_display;
 
 const char* g_extensions = NULL;
 
+bool g_egl_surfaceless_context_supported = false;
+
+bool g_initializedEGL = false;
+
 }  // namespace
 
 
@@ -107,6 +111,26 @@ protected:
 private:
     EGLSurface m_surfaceBuffer;
     DISALLOW_COPY_AND_ASSIGN(GLSurfaceQtEGL);
+};
+
+// The following comment is cited from chromium/ui/gl/gl_surface_egl.cc:
+// SurfacelessEGL is used as Offscreen surface when platform supports
+// KHR_surfaceless_context and GL_OES_surfaceless_context. This would avoid the
+// need to create a dummy EGLsurface in case we render to client API targets.
+class GLSurfacelessQtEGL : public GLSurfaceQt {
+public:
+    explicit GLSurfacelessQtEGL(const gfx::Size& size);
+
+ public:
+    bool Initialize() Q_DECL_OVERRIDE;
+    void Destroy() Q_DECL_OVERRIDE;
+    bool IsSurfaceless() const Q_DECL_OVERRIDE;
+    bool Resize(const gfx::Size& size, float scale_factor, bool has_alpha) Q_DECL_OVERRIDE;
+    EGLSurface GetHandle() Q_DECL_OVERRIDE;
+    void* GetShareHandle() Q_DECL_OVERRIDE;
+
+private:
+    DISALLOW_COPY_AND_ASSIGN(GLSurfacelessQtEGL);
 };
 
 
@@ -341,7 +365,25 @@ bool GLSurfaceQtEGL::InitializeOneOff()
         LOG(ERROR) << "eglInitialize failed with error " << GetLastEGLErrorString();
         return false;
     }
+#if 0
+// QTBUG-57290
+    g_egl_surfaceless_context_supported = ExtensionsContain(g_extensions, "EGL_KHR_surfaceless_context");
+    if (g_egl_surfaceless_context_supported) {
+        scoped_refptr<GLSurface> surface = new GLSurfacelessQtEGL(Size(1, 1));
+        scoped_refptr<GLContext> context = GLContext::CreateGLContext(
+            NULL, surface.get(), PreferIntegratedGpu);
 
+        if (!context->MakeCurrent(surface.get()))
+            g_egl_surfaceless_context_supported = false;
+
+        // Ensure context supports GL_OES_surfaceless_context.
+        if (g_egl_surfaceless_context_supported) {
+            g_egl_surfaceless_context_supported = context->HasExtension(
+                "GL_OES_surfaceless_context");
+            context->ReleaseCurrent(surface.get());
+        }
+    }
+#endif
     initialized = true;
     return true;
 }
@@ -355,11 +397,17 @@ bool GLSurface::InitializeOneOffInternal()
         return GLSurfaceQtEGL::InitializeOneOff();
 
     if (GetGLImplementation() == kGLImplementationDesktopGL) {
-#if defined(USE_X11)
-        return GLSurfaceQtGLX::InitializeOneOff();
-#elif defined(OS_WIN)
+#if defined(OS_WIN)
         return GLSurfaceQtWGL::InitializeOneOff();
+#elif defined(USE_X11)
+        if (GLSurfaceQtGLX::InitializeOneOff())
+            return true;
 #endif
+        // Fallback to trying EGL with desktop GL.
+        if (GLSurfaceQtEGL::InitializeOneOff()) {
+            g_initializedEGL = true;
+            return true;
+        }
     }
 
     return false;
@@ -426,7 +474,7 @@ bool GLSurfaceQtEGL::Initialize()
                                         g_config,
                                         pbuffer_attributes);
     if (!m_surfaceBuffer) {
-        LOG(ERROR) << "eglCreatePbufferSurface failed with error ", GetLastEGLErrorString();
+        LOG(ERROR) << "eglCreatePbufferSurface failed with error " << GetLastEGLErrorString();
         Destroy();
         return false;
     }
@@ -502,38 +550,78 @@ void* GLSurfaceQt::GetConfig()
     return g_config;
 }
 
+GLSurfacelessQtEGL::GLSurfacelessQtEGL(const gfx::Size& size)
+    : GLSurfaceQt(size)
+{
+}
+
+bool GLSurfacelessQtEGL::Initialize()
+{
+    return true;
+}
+
+void GLSurfacelessQtEGL::Destroy()
+{
+}
+
+bool GLSurfacelessQtEGL::IsSurfaceless() const
+{
+    return true;
+}
+
+bool GLSurfacelessQtEGL::Resize(const gfx::Size& size, float scale_factor, bool has_alpha)
+{
+    m_size = size;
+    return true;
+}
+
+EGLSurface GLSurfacelessQtEGL::GetHandle()
+{
+    return EGL_NO_SURFACE;
+}
+
+void* GLSurfacelessQtEGL::GetShareHandle()
+{
+    return NULL;
+}
+
 // static
 scoped_refptr<GLSurface>
 GLSurface::CreateOffscreenGLSurface(const gfx::Size& size)
 {
+    scoped_refptr<GLSurface> surface;
     switch (GetGLImplementation()) {
     case kGLImplementationDesktopGL: {
-#if defined(USE_X11)
-        scoped_refptr<GLSurface> surface = new GLSurfaceQtGLX(size);
-        if (!surface->Initialize())
-            return NULL;
-        return surface;
-#elif defined(OS_WIN)
-        scoped_refptr<GLSurface> surface = new GLSurfaceQtWGL(size);
-        if (!surface->Initialize())
-            return NULL;
-        return surface;
-#else
-        LOG(ERROR) << "Desktop GL is not supported on this platform.";
-        Q_UNREACHABLE();
-        return NULL;
+#if defined(OS_WIN)
+        surface = new GLSurfaceQtWGL(size);
+        if (surface->Initialize())
+            return surface;
+        break;
+#elif defined(USE_X11)
+        if (!g_initializedEGL) {
+            surface = new GLSurfaceQtGLX(size);
+            if (surface->Initialize())
+                return surface;
+        }
+        // no break
 #endif
     }
     case kGLImplementationEGLGLES2: {
-        scoped_refptr<GLSurface> surface = new GLSurfaceQtEGL(size);
-        if (!surface->Initialize())
-            return NULL;
-        return surface;
+        if (g_egl_surfaceless_context_supported)
+            surface = new GLSurfacelessQtEGL(size);
+        else
+            surface = new GLSurfaceQtEGL(size);
+
+        if (surface->Initialize())
+            return surface;
+        break;
     }
     default:
-        Q_UNREACHABLE();
-        return NULL;
+        break;
     }
+    LOG(ERROR) << "Requested OpenGL platform is not supported.";
+    Q_UNREACHABLE();
+    return NULL;
 }
 
 // static

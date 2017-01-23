@@ -557,6 +557,12 @@
  *  Q_COMPILER_RESTRICTED_VLA       variable-length arrays, prior to __cpp_runtime_arrays
  */
 
+#ifdef __cplusplus
+#  if __cplusplus < 201103L && !(defined(Q_CC_MSVC) && Q_CC_MSVC >= 1800)
+#    error Qt requires a C++11 compiler and yours does not seem to be that.
+#  endif
+#endif
+
 #ifdef Q_CC_INTEL
 #  define Q_COMPILER_RESTRICTED_VLA
 #  define Q_COMPILER_VARIADIC_MACROS // C++11 feature supported as an extension in other modes, too
@@ -756,7 +762,9 @@
 #      define Q_COMPILER_TEMPLATE_ALIAS
 #    endif
 #    if __has_feature(cxx_thread_local)
-#      define Q_COMPILER_THREAD_LOCAL
+#      if !defined(__FreeBSD__) /* FreeBSD clang fails on __cxa_thread_atexit */
+#        define Q_COMPILER_THREAD_LOCAL
+#      endif
 #    endif
 #    if __has_feature(cxx_user_literals)
 #      define Q_COMPILER_UDL
@@ -942,7 +950,8 @@
 #    endif /* VC 11 */
 #    if _MSC_VER >= 1800
        /* C++11 features in VC12 = VC2013 */
-#      define Q_COMPILER_DEFAULT_MEMBERS
+/* Implemented, but can't be used on move special members */
+/* #      define Q_COMPILER_DEFAULT_MEMBERS */
 #      define Q_COMPILER_DELETE_MEMBERS
 #      define Q_COMPILER_DELEGATING_CONSTRUCTORS
 #      define Q_COMPILER_EXPLICIT_CONVERSIONS
@@ -960,6 +969,7 @@
 #    endif /* VC 12 SP 2 RC */
 #    if _MSC_VER >= 1900
        /* C++11 features in VC14 = VC2015 */
+#      define Q_COMPILER_DEFAULT_MEMBERS
 #      define Q_COMPILER_ALIGNAS
 #      define Q_COMPILER_ALIGNOF
 // Partial support, insufficient for Qt
@@ -1029,6 +1039,33 @@
 // critical definitions. (Reported as Intel Issue ID 6000117277)
 #  define __USE_CONSTEXPR 1
 #  define __USE_NOEXCEPT 1
+# elif defined(Q_CC_MSVC) && (defined(Q_CC_CLANG) || defined(Q_CC_INTEL))
+// Clang and the Intel compiler support more C++ features than the Microsoft compiler
+// so make sure we don't enable them if the MS headers aren't properly adapted.
+#  ifndef _HAS_CONSTEXPR
+#   undef Q_COMPILER_CONSTEXPR
+#  endif
+#  ifndef _HAS_DECLTYPE
+#   undef Q_COMPILER_DECLTYPE
+#  endif
+#  ifndef _HAS_INITIALIZER_LISTS
+#   undef Q_COMPILER_INITIALIZER_LISTS
+#  endif
+#  ifndef _HAS_NULLPTR_T
+#   undef Q_COMPILER_NULLPTR
+#  endif
+#  ifndef _HAS_RVALUE_REFERENCES
+#   undef Q_COMPILER_RVALUE_REFS
+#  endif
+#  ifndef _HAS_SCOPED_ENUM
+#   undef Q_COMPILER_CLASS_ENUM
+#  endif
+#  ifndef _HAS_TEMPLATE_ALIAS
+#   undef Q_COMPILER_TEMPLATE_ALIAS
+#  endif
+#  ifndef _HAS_VARIADIC_TEMPLATES
+#   undef Q_COMPILER_VARIADIC_TEMPLATES
+#  endif
 # elif defined(_LIBCPP_VERSION)
 // libc++ uses __has_feature(cxx_atomic), so disable the feature if the compiler
 // doesn't support it. That's required for the Intel compiler 14.x or earlier on OS X, for example.
@@ -1071,16 +1108,18 @@
 #  define Q_COMPILER_DEFAULT_DELETE_MEMBERS
 #endif
 
-#if defined(__cpp_constexpr) && __cpp_constexpr-0 >= 201304
-# define Q_DECL_CONSTEXPR constexpr
-# define Q_DECL_RELAXED_CONSTEXPR constexpr
-# define Q_CONSTEXPR constexpr
-# define Q_RELAXED_CONSTEXPR constexpr
-#elif defined Q_COMPILER_CONSTEXPR
-# define Q_DECL_CONSTEXPR constexpr
-# define Q_DECL_RELAXED_CONSTEXPR
-# define Q_CONSTEXPR constexpr
-# define Q_RELAXED_CONSTEXPR const
+#if defined Q_COMPILER_CONSTEXPR
+# if defined(__cpp_constexpr) && __cpp_constexpr-0 >= 201304
+#  define Q_DECL_CONSTEXPR constexpr
+#  define Q_DECL_RELAXED_CONSTEXPR constexpr
+#  define Q_CONSTEXPR constexpr
+#  define Q_RELAXED_CONSTEXPR constexpr
+# else
+#  define Q_DECL_CONSTEXPR constexpr
+#  define Q_DECL_RELAXED_CONSTEXPR
+#  define Q_CONSTEXPR constexpr
+#  define Q_RELAXED_CONSTEXPR const
+# endif
 #else
 # define Q_DECL_CONSTEXPR
 # define Q_DECL_RELAXED_CONSTEXPR
@@ -1114,7 +1153,8 @@
 # define Q_DECL_NOTHROW Q_DECL_NOEXCEPT
 #endif
 
-#if defined(Q_COMPILER_ALIGNOF) && !defined(Q_ALIGNOF)
+#if defined(Q_COMPILER_ALIGNOF)
+#  undef Q_ALIGNOF
 #  define Q_ALIGNOF(x)  alignof(x)
 #endif
 

@@ -52,13 +52,16 @@
 #include <Qt3DQuick/QQmlAspectEngine>
 #include <Qt3DRender/qcamera.h>
 #include <Qt3DRender/qrenderaspect.h>
-#include <Qt3DRender/qrendersettings.h>
 #include <Qt3DRender/qrendersurfaceselector.h>
+#include <Qt3DRender/private/qrendersurfaceselector_p.h>
 #include <Qt3DInput/qinputaspect.h>
 #include <Qt3DInput/qinputsettings.h>
 #include <Qt3DLogic/qlogicaspect.h>
 
 #include <QQmlContext>
+#include <qqmlincubator.h>
+#include <QGuiApplication>
+#include <QScreen>
 
 #include <QtGui/qopenglcontext.h>
 
@@ -68,14 +71,39 @@ namespace Qt3DExtras {
 
 namespace Quick {
 
+namespace {
+
+class Qt3DQuickWindowIncubationController : public QObject, public QQmlIncubationController
+{
+    Q_OBJECT
+public:
+    explicit Qt3DQuickWindowIncubationController(QObject *parent = nullptr)
+        : QObject(parent)
+        , m_incubationTime(std::max(1, int(1000 / QGuiApplication::primaryScreen()->refreshRate()) / 3))
+    {
+        startTimer(QGuiApplication::primaryScreen()->refreshRate());
+    }
+
+    void timerEvent(QTimerEvent *) Q_DECL_OVERRIDE
+    {
+        incubateFor(m_incubationTime);
+    }
+
+private:
+    const int m_incubationTime;
+};
+
+} // anonymous
+
 Qt3DQuickWindow::Qt3DQuickWindow(QWindow *parent)
-    : QQuickWindow(parent)
+    : QWindow(parent)
     , m_engine(nullptr)
     , m_renderAspect(nullptr)
     , m_inputAspect(nullptr)
     , m_logicAspect(nullptr)
     , m_initialized(false)
     , m_cameraAspectRatioMode(AutomaticAspectRatio)
+    , m_incubationController(nullptr)
 {
     setSurfaceType(QSurface::OpenGLSurface);
 
@@ -163,11 +191,14 @@ void Qt3DQuickWindow::showEvent(QShowEvent *e)
 
         // Set the QQmlIncubationController on the window
         // to benefit from asynchronous incubation
-        m_engine->qmlEngine()->setIncubationController(QQuickWindow::incubationController());
+        if (!m_incubationController)
+            m_incubationController = new Qt3DQuickWindowIncubationController(this);
+
+        m_engine->qmlEngine()->setIncubationController(m_incubationController);
 
         m_initialized = true;
     }
-    QQuickWindow::showEvent(e);
+    QWindow::showEvent(e);
 }
 
 void Qt3DQuickWindow::onSceneCreated(QObject *rootObject)
@@ -179,7 +210,7 @@ void Qt3DQuickWindow::onSceneCreated(QObject *rootObject)
     if (m_cameraAspectRatioMode == AutomaticAspectRatio) {
         // Set aspect ratio of first camera to match the window
         QList<Qt3DRender::QCamera *> cameras
-            = rootObject->findChildren<Qt3DRender::QCamera *>();
+                = rootObject->findChildren<Qt3DRender::QCamera *>();
         if (cameras.isEmpty()) {
             qWarning() << "No camera found";
         } else {
@@ -199,30 +230,9 @@ void Qt3DQuickWindow::onSceneCreated(QObject *rootObject)
 
 void Qt3DQuickWindow::setWindowSurface(QObject *rootObject)
 {
-    // Find surface selector in framegraph and set ourselves up as the
-    // render surface there
-    Qt3DRender::QRenderSettings *rendererSettings
-        = rootObject->findChild<Qt3DRender::QRenderSettings *>();
-    if (!rendererSettings) {
-        qWarning() << "No renderer settings component found";
-        return;
-    }
-
-    Qt3DCore::QNode *frameGraphRoot = rendererSettings->activeFrameGraph();
-    if (!frameGraphRoot) {
-        qWarning() << "No active frame graph found";
-        return;
-    }
-
-    Qt3DRender::QRenderSurfaceSelector *surfaceSelector = qobject_cast<Qt3DRender::QRenderSurfaceSelector *>(frameGraphRoot);
-    if (!surfaceSelector)
-        surfaceSelector = frameGraphRoot->findChild<Qt3DRender::QRenderSurfaceSelector *>();
-    if (!surfaceSelector) {
-        qWarning() << "No render surface selector found in frame graph";
-        return;
-    }
-
-    surfaceSelector->setSurface(this);
+    Qt3DRender::QRenderSurfaceSelector *surfaceSelector = Qt3DRender::QRenderSurfaceSelectorPrivate::find(rootObject);
+    if (surfaceSelector)
+        surfaceSelector->setSurface(this);
 }
 
 void Qt3DQuickWindow::setCameraAspectModeHelper()
@@ -231,6 +241,8 @@ void Qt3DQuickWindow::setCameraAspectModeHelper()
     case AutomaticAspectRatio:
         connect(this, &QWindow::widthChanged, this, &Qt3DQuickWindow::updateCameraAspectRatio);
         connect(this, &QWindow::heightChanged, this, &Qt3DQuickWindow::updateCameraAspectRatio);
+        // Update the aspect ratio the first time the surface is set
+        updateCameraAspectRatio();
         break;
     case UserAspectRatio:
         disconnect(this, &QWindow::widthChanged, this, &Qt3DQuickWindow::updateCameraAspectRatio);
@@ -252,3 +264,5 @@ void Qt3DQuickWindow::updateCameraAspectRatio()
 } // Qt3DExtras
 
 QT_END_NAMESPACE
+
+#include "qt3dquickwindow.moc"

@@ -11,6 +11,7 @@ HEADERS += \
     $$PWD/mousedevice_p.h \
     $$PWD/mouseeventdispatcherjob_p.h \
     $$PWD/mouseeventfilter_p.h \
+    $$PWD/abstractactioninput_p.h \
     $$PWD/abstractaxisinput_p.h \
     $$PWD/actioninput_p.h \
     $$PWD/axis_p.h \
@@ -29,7 +30,8 @@ HEADERS += \
     $$PWD/inputchord_p.h \
     $$PWD/inputsequence_p.h \
     $$PWD/inputsettings_p.h \
-    $$PWD/eventsourcesetterhelper_p.h
+    $$PWD/eventsourcesetterhelper_p.h \
+    $$PWD/job_common_p.h
 
 SOURCES += \
     $$PWD/keyboarddevice.cpp \
@@ -42,6 +44,7 @@ SOURCES += \
     $$PWD/mousedevice.cpp \
     $$PWD/mouseeventfilter.cpp \
     $$PWD/mouseeventdispatcherjob.cpp \
+    $$PWD/abstractactioninput.cpp \
     $$PWD/abstractaxisinput.cpp \
     $$PWD/actioninput.cpp \
     $$PWD/axis.cpp \

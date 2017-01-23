@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd and/or its subsidiary(-ies).
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd and/or its subsidiary(-ies).
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -38,6 +41,7 @@
 
 #include <QtCore/qfunctions_winrt.h>
 #include <QtCore/QGlobalStatic>
+#include <QtCore/QLoggingCategory>
 #include <QtCore/QMetaMethod>
 #include <QtCore/QPointer>
 #include <QtGui/QOpenGLContext>
@@ -58,6 +62,8 @@ using namespace Microsoft::WRL;
 
 QT_BEGIN_NAMESPACE
 
+Q_LOGGING_CATEGORY(lcMMVideoRender, "qt.mm.videorender")
+
 #define BREAK_IF_FAILED(msg) RETURN_IF_FAILED(msg, break)
 #define CONTINUE_IF_FAILED(msg) RETURN_IF_FAILED(msg, continue)
 
@@ -66,6 +72,7 @@ struct QWinRTVideoRendererControlGlobal
 {
     QWinRTVideoRendererControlGlobal()
     {
+        qCDebug(lcMMVideoRender) << __FUNCTION__;
         HRESULT hr;
 
         D3D_FEATURE_LEVEL featureLevels[] =
@@ -202,6 +209,7 @@ ID3D11Device *QWinRTAbstractVideoRendererControl::d3dDevice()
 // This is required so that subclasses can stop the render thread before deletion
 void QWinRTAbstractVideoRendererControl::shutdown()
 {
+    qCDebug(lcMMVideoRender) << __FUNCTION__;
     Q_D(QWinRTAbstractVideoRendererControl);
     if (d->renderThread.isRunning()) {
         d->renderThread.requestInterruption();
@@ -212,6 +220,7 @@ void QWinRTAbstractVideoRendererControl::shutdown()
 QWinRTAbstractVideoRendererControl::QWinRTAbstractVideoRendererControl(const QSize &size, QObject *parent)
     : QVideoRendererControl(parent), d_ptr(new QWinRTAbstractVideoRendererControlPrivate)
 {
+    qCDebug(lcMMVideoRender) << __FUNCTION__;
     Q_D(QWinRTAbstractVideoRendererControl);
 
     d->format = QVideoSurfaceFormat(size, QVideoFrame::Format_BGRA32,
@@ -232,6 +241,7 @@ QWinRTAbstractVideoRendererControl::QWinRTAbstractVideoRendererControl(const QSi
 
 QWinRTAbstractVideoRendererControl::~QWinRTAbstractVideoRendererControl()
 {
+    qCDebug(lcMMVideoRender) << __FUNCTION__;
     Q_D(QWinRTAbstractVideoRendererControl);
     CriticalSectionLocker locker(&d->mutex);
     shutdown();
@@ -253,6 +263,7 @@ void QWinRTAbstractVideoRendererControl::setSurface(QAbstractVideoSurface *surfa
 
 void QWinRTAbstractVideoRendererControl::syncAndRender()
 {
+    qCDebug(lcMMVideoRender) << __FUNCTION__;
     Q_D(QWinRTAbstractVideoRendererControl);
 
     QThread *currentThread = QThread::currentThread();
@@ -334,6 +345,7 @@ void QWinRTAbstractVideoRendererControl::setScanLineDirection(QVideoSurfaceForma
 
 void QWinRTAbstractVideoRendererControl::setActive(bool active)
 {
+    qCDebug(lcMMVideoRender) << __FUNCTION__ << active;
     Q_D(QWinRTAbstractVideoRendererControl);
 
     if (d->active == active)
@@ -351,7 +363,7 @@ void QWinRTAbstractVideoRendererControl::setActive(bool active)
         return;
     }
 
-    d->renderThread.requestInterruption();
+    shutdown();
     if (d->surface && d->surface->isActive())
         d->surface->stop();
 }

@@ -99,7 +99,7 @@ bool QQuickWebEngineSettings::javascriptEnabled() const
 /*!
     \qmlproperty bool WebEngineSettings::javascriptCanOpenWindows
 
-    Allows JavaScript programs to open new windows.
+    Allows JavaScript programs to open popup windows without user interaction.
 
     Enabled by default.
 */
@@ -304,7 +304,7 @@ bool QQuickWebEngineSettings::touchIconsEnabled() const
 }
 
 /*!
-    \qmlproperty QString WebEngineSettings::defaultTextEncoding
+    \qmlproperty string WebEngineSettings::defaultTextEncoding
     \since QtWebEngine 1.2
 
     Sets the default encoding. The value must be a string describing an encoding such as "utf-8" or

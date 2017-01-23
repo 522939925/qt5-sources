@@ -63,7 +63,7 @@ static const int AUTO_REPEAT_INTERVAL = 100;
     radio buttons and check boxes. As an abstract control, it has no delegate
     implementations, leaving them to the types that derive from it.
 
-    \sa ButtonGroup
+    \sa ButtonGroup, {Button Controls}
 */
 
 /*!
@@ -95,7 +95,7 @@ static const int AUTO_REPEAT_INTERVAL = 100;
 /*!
     \qmlsignal QtQuick.Controls::AbstractButton::pressAndHold()
 
-    This signal is emitted when the button is interactively perssed and held down by the user.
+    This signal is emitted when the button is interactively pressed and held down by the user.
 */
 
 /*!
@@ -105,7 +105,7 @@ static const int AUTO_REPEAT_INTERVAL = 100;
 */
 
 QQuickAbstractButtonPrivate::QQuickAbstractButtonPrivate() :
-    down(false), explicitDown(false), pressed(false), checked(false), checkable(false),
+    down(false), explicitDown(false), pressed(false), keepPressed(false), checked(false), checkable(false),
     autoExclusive(false), autoRepeat(false), wasHeld(false),
     holdTimer(0), delayTimer(0), repeatTimer(0), repeatButton(Qt::NoButton), indicator(nullptr), group(nullptr)
 {
@@ -384,7 +384,7 @@ void QQuickAbstractButton::setCheckable(bool checkable)
     one button can be checked at any time; checking another button automatically
     unchecks the previously checked one.
 
-    \note The property has no effect on buttons that belong to an ButtonGroup.
+    \note The property has no effect on buttons that belong to a ButtonGroup.
 
     RadioButton and TabButton are auto-exclusive by default.
 */
@@ -438,7 +438,7 @@ void QQuickAbstractButton::setIndicator(QQuickItem *indicator)
     if (d->indicator == indicator)
         return;
 
-    delete d->indicator;
+    d->deleteDelegate(d->indicator);
     d->indicator = indicator;
     if (indicator) {
         if (!indicator->parentItem())
@@ -525,7 +525,7 @@ void QQuickAbstractButton::mouseMoveEvent(QMouseEvent *event)
 {
     Q_D(QQuickAbstractButton);
     QQuickControl::mouseMoveEvent(event);
-    setPressed(contains(event->pos()));
+    setPressed(d->keepPressed || contains(event->pos()));
 
     if (d->autoRepeat)
         d->stopPressRepeat();
@@ -540,7 +540,7 @@ void QQuickAbstractButton::mouseReleaseEvent(QMouseEvent *event)
     bool wasPressed = d->pressed;
     setPressed(false);
 
-    if (contains(event->pos()))
+    if (d->keepPressed || contains(event->pos()))
         nextCheckState();
 
     if (wasPressed) {

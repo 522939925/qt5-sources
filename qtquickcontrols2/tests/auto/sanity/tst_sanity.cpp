@@ -114,7 +114,8 @@ public:
 
         QQmlJS::Parser parser(&engine);
         if (!parser.parse()) {
-            foreach (const QQmlJS::DiagnosticMessage &msg, parser.diagnosticMessages())
+            const auto diagnosticMessages = parser.diagnosticMessages();
+            for (const QQmlJS::DiagnosticMessage &msg : diagnosticMessages)
                 m_errors += QString("%s:%d : %s").arg(m_fileName).arg(msg.loc.startLine).arg(msg.message);
             return false;
         }
@@ -138,10 +139,11 @@ private:
 void tst_Sanity::initTestCase()
 {
     QDirIterator it(QQC2_IMPORT_PATH, QStringList() << "*.qml" << "*.js", QDir::Files, QDirIterator::Subdirectories);
+    const QStringList excludeDirs = QStringList() << QStringLiteral("snippets") << QStringLiteral("screenshots") << QStringLiteral("designer");
     while (it.hasNext()) {
         it.next();
         QFileInfo info = it.fileInfo();
-        if (info.dir().dirName() != QStringLiteral("snippets") && info.dir().dirName() != QStringLiteral("designer"))
+        if (!excludeDirs.contains(info.dir().dirName()))
             files.insert(info.dir().dirName() + "/" + info.fileName(), info.filePath());
     }
 }
@@ -267,11 +269,12 @@ static void addTestRows(QQmlEngine *engine, const QString &sourcePath, const QSt
     // the engine's import path. This way we can use QQmlComponent to load each QML file
     // for benchmarking.
 
-    QFileInfoList entries = QDir(QQC2_IMPORT_PATH "/" + sourcePath).entryInfoList(QStringList("*.qml"), QDir::Files);
-    foreach (const QFileInfo &entry, entries) {
+    const QFileInfoList entries = QDir(QQC2_IMPORT_PATH "/" + sourcePath).entryInfoList(QStringList("*.qml"), QDir::Files);
+    for (const QFileInfo &entry : entries) {
         QString name = entry.baseName();
         if (!skiplist.contains(name)) {
-            foreach (const QString &importPath, engine->importPathList()) {
+            const auto importPathList = engine->importPathList();
+            for (const QString &importPath : importPathList) {
                 QString name = entry.dir().dirName() + "/" + entry.fileName();
                 QString filePath = importPath + "/" + targetPath + "/" + entry.fileName();
                 if (QFile::exists(filePath)) {
@@ -296,7 +299,7 @@ void tst_Sanity::attachedObjects()
     QSet<QString> classNames;
     QScopedPointer<QObject> object(component.create());
     QVERIFY2(object.data(), qPrintable(component.errorString()));
-    foreach (QObject *object, *qt_qobjects) {
+    for (QObject *object : qAsConst(*qt_qobjects)) {
         if (object->parent() == &engine)
             continue; // allow "global" instances
         QString className = object->metaObject()->className();

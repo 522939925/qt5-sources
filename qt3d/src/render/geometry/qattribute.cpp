@@ -65,7 +65,12 @@ QAttributePrivate::QAttributePrivate()
  * \qmltype Attribute
  * \instantiates Qt3DRender::QAttribute
  * \inqmlmodule Qt3D.Render
- * \brief Uncreatable
+ * \brief Defines an attribute and how data should be read from a Buffer.
+ *
+ * When providing your own attributes, it may make sense to name your attribute
+ * using helpers such as QAttribute::defaultPositionAttributeName() as that
+ * will ensure your geometry will be compatible with picking and the various
+ * materials provided in the Qt3DExtras module.
  */
 
 /*!
@@ -74,6 +79,14 @@ QAttributePrivate::QAttributePrivate()
  *
  * \inherits Qt3DCore::QNode
  *
+ * \brief Defines an attribute and how data should be read from a QBuffer.
+ *
+ * When providing your own attributes, it may make sense to name your attribute
+ * using helpers such as QAttribute::defaultPositionAttributeName() as that
+ * will ensure your geometry will be compatible with picking and the various
+ * materials provided in the Qt3DExtras module.
+ *
+ * \sa QBuffer.
  */
 
 /*!
@@ -119,7 +132,7 @@ QAttribute::QAttribute(QNode *parent)
  * and \a stride with \a parent.
  */
 QAttribute::QAttribute(QBuffer *buf, VertexBaseType type, uint dataSize, uint count, uint offset, uint stride, QNode *parent)
-    : QNode(*new QAttributePrivate(), parent)
+    : QAttribute(parent)
 {
     Q_D(QAttribute);
     setBuffer(buf);
@@ -136,7 +149,7 @@ QAttribute::QAttribute(QBuffer *buf, VertexBaseType type, uint dataSize, uint co
  * dataSize, \a count, \a offset, and \a stride with \a parent.
  */
 QAttribute::QAttribute(QBuffer *buf, const QString &name, VertexBaseType type, uint dataSize, uint count, uint offset, uint stride, QNode *parent)
-    : QNode(*new QAttributePrivate(), parent)
+    : QAttribute(parent)
 {
     Q_D(QAttribute);
     setBuffer(buf);
@@ -178,7 +191,8 @@ QString QAttribute::name() const
 /*!
  * \property QAttribute::vertexSize
  *
- * Holds the data size.
+ * Holds the data size, it can only be 1 to 4 units (scalars and vectors),
+ * 9 units (3x3 matrices) or 16 units (4x4 matrices).
  */
 uint QAttribute::vertexSize() const
 {
@@ -303,7 +317,7 @@ void QAttribute::setDataSize(uint size)
     Q_D(QAttribute);
     if (d->m_dataSize == size)
         return;
-    Q_ASSERT(size >= 1 && size <= 4);
+    Q_ASSERT((size >= 1 && size <= 4) || (size == 9) || (size == 16));
     d->m_dataSize = size;
     emit dataSizeChanged(size);
 }

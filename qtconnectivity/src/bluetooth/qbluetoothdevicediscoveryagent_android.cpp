@@ -227,6 +227,11 @@ void QBluetoothDeviceDiscoveryAgentPrivate::processDiscoveredDevices(
 
     Q_Q(QBluetoothDeviceDiscoveryAgent);
 
+    // Android Classic scan and LE scan can find the same device under different names
+    // The classic name finds the SDP based device name, the LE scan finds the name in
+    // the advertisement package.
+    // If address is same but name different then we keep both entries.
+
     for (int i = 0; i < discoveredDevices.size(); i++) {
         if (discoveredDevices[i].address() == info.address()) {
             if (discoveredDevices[i] == info) {
@@ -235,11 +240,13 @@ void QBluetoothDeviceDiscoveryAgentPrivate::processDiscoveredDevices(
                 return;
             }
 
-            // same device found -> avoid duplicates and update core configuration
-            discoveredDevices[i].setCoreConfigurations(discoveredDevices[i].coreConfigurations() | info.coreConfigurations());
-
-            emit q->deviceDiscovered(info);
-            return;
+            if (discoveredDevices.at(i).name() == info.name()) {
+                qCDebug(QT_BT_ANDROID) << "Almost Duplicate "<< info.address()
+                                       << info.name() << "- replacing in place";
+                discoveredDevices.replace(i, info);
+                emit q->deviceDiscovered(info);
+                return;
+            }
         }
     }
 
@@ -264,6 +271,7 @@ void QBluetoothDeviceDiscoveryAgentPrivate::startLowEnergyScan()
             env->ExceptionClear();
             m_active = NoScanActive;
             emit q->finished();
+            return;
         }
 
         leScanner.setField<jlong>("qtObject", reinterpret_cast<long>(receiver));
@@ -274,6 +282,7 @@ void QBluetoothDeviceDiscoveryAgentPrivate::startLowEnergyScan()
         qCWarning(QT_BT_ANDROID) << "Cannot start BTLE device scanner";
         m_active = NoScanActive;
         emit q->finished();
+        return;
     }
 
     if (!leScanTimeout) {

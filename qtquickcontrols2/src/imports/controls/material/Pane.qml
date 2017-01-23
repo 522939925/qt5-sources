@@ -50,18 +50,15 @@ T.Pane {
 
     padding: 12
 
-    //! [contentItem]
     contentItem: Item { }
-    //! [contentItem]
 
-    //! [background]
     background: Rectangle {
         color: control.Material.backgroundColor
+        radius: control.Material.elevation > 0 ? 2 : 0
 
         layer.enabled: control.enabled && control.Material.elevation > 0
         layer.effect: ElevationEffect {
             elevation: control.Material.elevation
         }
     }
-    //! [background]
 }

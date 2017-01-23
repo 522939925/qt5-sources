@@ -537,6 +537,10 @@
       # builds.
       'use_custom_libcxx%': 0,
 
+      # Use system libc++ instead of the default C++ library, usually libstdc++.
+      # This is intended for Linux/*BSD builds only.
+      'use_system_libcxx%': 0,
+
       # Use the provided profiled order file to link Chrome image with it.
       # This makes Chrome faster by better using CPU cache when executing code.
       # This is known as PGO (profile guided optimization).
@@ -726,6 +730,12 @@
 
       # By default include non-appstore-compliant code.
       'appstore_compliant_code%': 0,
+
+      # By default enable force touch API. It's only supported with OSX SDK 10.10.3+.
+      'disable_force_touch%': 0,
+
+      # Enable this to turn off the delete-null-pointer-checks optimization in GCC 6+
+      'no_delete_null_pointer_checks%': 0,
 
       'conditions': [
         # A flag for POSIX platforms
@@ -1032,11 +1042,11 @@
         }, {
           'sas_dll_path%': '<(DEPTH)/third_party/platformsdk_win7/files/redist/x86',
         }],
-
+	# pkg-config for qt builds is set by qmake config
         ['sysroot!=""', {
-          'pkg-config': '<(chroot_cmd) <(DEPTH)/build/linux/pkg-config-wrapper "<(sysroot)" "<(target_arch)" "<(system_libdir)"',
+          'pkg-config%': '<(chroot_cmd) <(DEPTH)/build/linux/pkg-config-wrapper "<(sysroot)" "<(target_arch)" "<(system_libdir)"',
         }, {
-          'pkg-config': 'pkg-config'
+	   'pkg-config%': 'pkg-config'
         }],
 
         # Enable WebVR support by default on Android
@@ -1224,6 +1234,7 @@
     'use_instrumented_libraries%': '<(use_instrumented_libraries)',
     'use_prebuilt_instrumented_libraries%': '<(use_prebuilt_instrumented_libraries)',
     'use_custom_libcxx%': '<(use_custom_libcxx)',
+    'use_system_libcxx%': '<(use_system_libcxx)',
     'order_profiling%': '<(order_profiling)',
     'order_text_section%': '<(order_text_section)',
     'enable_extensions%': '<(enable_extensions)',
@@ -1271,6 +1282,8 @@
     'enable_hangout_services_extension%' : '<(enable_hangout_services_extension)',
     'proprietary_codecs%': '<(proprietary_codecs)',
     'appstore_compliant_code%': '<(appstore_compliant_code)',
+    'no_delete_null_pointer_checks%': '<(no_delete_null_pointer_checks)',
+    'disable_force_touch%': '<(disable_force_touch)',
     'use_goma%': '<(use_goma)',
     'gomadir%': '<(gomadir)',
     'use_lto%': '<(use_lto)',
@@ -2767,6 +2780,9 @@
       }],
       ['appstore_compliant_code==1', {
         'defines': ['USE_APPSTORE_COMPLIANT_CODE'],
+      }],
+      ['disable_force_touch==1', {
+        'defines': ['QT_DISABLE_FORCE_TOUCH'],
       }],
       ['enable_viewport==1', {
         'defines': ['ENABLE_VIEWPORT'],
@@ -4362,6 +4378,14 @@
               '-fcolor-diagnostics',
             ],
           }],
+          ['clang==1 and use_system_libcxx==1', {
+            'cflags_cc': [
+              '-stdlib=libc++'
+            ],
+            'ldflags': [
+              '-stdlib=libc++'
+            ],
+          }],
           # Common options for AddressSanitizer, LeakSanitizer,
           # ThreadSanitizer, MemorySanitizer and non-official CFI builds.
           ['asan==1 or lsan==1 or tsan==1 or msan==1 or ubsan==1 or ubsan_vptr==1 or '
@@ -4701,6 +4725,9 @@
             'ldflags': [
               '-Wl,--disable-new-dtags',
             ],
+          }],
+          [ 'no_delete_null_pointer_checks==1', {
+              'cflags_cc': [ '-fno-delete-null-pointer-checks' ],
           }],
           ['clang==0', {
             'target_conditions': [

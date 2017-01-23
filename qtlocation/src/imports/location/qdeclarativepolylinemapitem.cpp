@@ -180,7 +180,8 @@ QGeoMapPolylineGeometry::QGeoMapPolylineGeometry()
     \internal
 */
 void QGeoMapPolylineGeometry::updateSourcePoints(const QGeoMap &map,
-                                                 const QList<QGeoCoordinate> &path)
+                                                 const QList<QGeoCoordinate> &path,
+                                                 const QGeoCoordinate geoLeftBound)
 {
     bool foundValid = false;
     double minX = -1.0;
@@ -190,6 +191,8 @@ void QGeoMapPolylineGeometry::updateSourcePoints(const QGeoMap &map,
 
     if (!sourceDirty_)
         return;
+
+    geoLeftBound_ = geoLeftBound;
 
     // clear the old data and reserve enough memory
     srcPoints_.clear();
@@ -217,16 +220,23 @@ void QGeoMapPolylineGeometry::updateSourcePoints(const QGeoMap &map,
         if (!qIsFinite(point.x()) || !qIsFinite(point.y()))
             return;
 
+        bool isPointLessThanUnwrapBelowX = (point.x() < unwrapBelowX);
+        bool isCoordNotLeftBound = !qFuzzyCompare(geoLeftBound_.longitude(), coord.longitude());
+        bool isPointNotUnwrapBelowX = !qFuzzyCompare(point.x(), unwrapBelowX);
+        bool isPointNotMapWidthHalf = !qFuzzyCompare(mapWidthHalf, point.x());
+
         // unwrap x to preserve geometry if moved to border of map
-        if (preserveGeometry_ && point.x() < unwrapBelowX
-                && !qFuzzyCompare(geoLeftBound_.longitude(), coord.longitude())
-                && !qFuzzyCompare(point.x(), unwrapBelowX)
-                && !qFuzzyCompare(mapWidthHalf, point.x()))
-            point.setX(unwrapBelowX + geoDistanceToScreenWidth(map, geoLeftBound_, coord));
+        if (preserveGeometry_ && isPointLessThanUnwrapBelowX
+                && isCoordNotLeftBound
+                && isPointNotUnwrapBelowX
+                && isPointNotMapWidthHalf) {
+            double distance = geoDistanceToScreenWidth(map, geoLeftBound_, coord);
+            point.setX(unwrapBelowX + distance);
+        }
 
         if (!foundValid) {
             foundValid = true;
-            srcOrigin_ = coord;
+            srcOrigin_ = coord;  // TODO: Make this consistent with the left bound
             origin = point;
             point = QDoubleVector2D(0,0);
 
@@ -258,8 +268,6 @@ void QGeoMapPolylineGeometry::updateSourcePoints(const QGeoMap &map,
     }
 
     sourceBounds_ = QRectF(QPointF(minX, minY), QPointF(maxX, maxY));
-    geoLeftBound_ = map.itemPositionToCoordinate(
-                                    QDoubleVector2D(minX + origin.x(), minY + origin.y()), false);
 }
 
 ////////////////////////////////////////////////////////////////////////////
@@ -498,7 +506,9 @@ void QDeclarativePolylineMapItem::setMap(QDeclarativeGeoMap *quickMap, QGeoMap *
 
 QJSValue QDeclarativePolylineMapItem::path() const
 {
-    QQmlContext *context = QQmlEngine::contextForObject(parent());
+    QQmlContext *context = QQmlEngine::contextForObject(this);
+    if (!context)
+        return QJSValue();
     QQmlEngine *engine = context->engine();
     QV4::ExecutionEngine *v4 = QQmlEnginePrivate::getV4Engine(engine);
 
@@ -545,7 +555,8 @@ void QDeclarativePolylineMapItem::setPathFromGeoList(const QList<QGeoCoordinate>
         return;
 
     path_ = path;
-
+    geoLeftBound_ = getLeftBound(path_, deltaXs_, minX_);
+    geometry_.setPreserveGeometry(true, geoLeftBound_);
     geometry_.markSourceDirty();
     polishAndUpdate();
     emit pathChanged();
@@ -575,7 +586,8 @@ int QDeclarativePolylineMapItem::pathLength() const
 void QDeclarativePolylineMapItem::addCoordinate(const QGeoCoordinate &coordinate)
 {
     path_.append(coordinate);
-
+    geoLeftBound_ = getLeftBound(path_, deltaXs_, minX_, geoLeftBound_);
+    geometry_.setPreserveGeometry(true, geoLeftBound_);
     geometry_.markSourceDirty();
     polishAndUpdate();
     emit pathChanged();
@@ -596,7 +608,8 @@ void QDeclarativePolylineMapItem::insertCoordinate(int index, const QGeoCoordina
         return;
 
     path_.insert(index, coordinate);
-
+    geoLeftBound_ = getLeftBound(path_, deltaXs_, minX_);
+    geometry_.setPreserveGeometry(true, geoLeftBound_);
     geometry_.markSourceDirty();
     polishAndUpdate();
     emit pathChanged();
@@ -618,7 +631,8 @@ void QDeclarativePolylineMapItem::replaceCoordinate(int index, const QGeoCoordin
         return;
 
     path_[index] = coordinate;
-
+    geoLeftBound_ = getLeftBound(path_, deltaXs_, minX_);
+    geometry_.setPreserveGeometry(true, geoLeftBound_);
     geometry_.markSourceDirty();
     polishAndUpdate();
     emit pathChanged();
@@ -666,14 +680,7 @@ bool QDeclarativePolylineMapItem::containsCoordinate(const QGeoCoordinate &coord
 void QDeclarativePolylineMapItem::removeCoordinate(const QGeoCoordinate &coordinate)
 {
     int index = path_.lastIndexOf(coordinate);
-    if (index == -1)
-        return;
-
-    path_.removeAt(index);
-
-    geometry_.markSourceDirty();
-    polishAndUpdate();
-    emit pathChanged();
+    removeCoordinate(index);
 }
 
 /*!
@@ -693,7 +700,8 @@ void QDeclarativePolylineMapItem::removeCoordinate(int index)
         return;
 
     path_.removeAt(index);
-
+    geoLeftBound_ = getLeftBound(path_, deltaXs_, minX_);
+    geometry_.setPreserveGeometry(true, geoLeftBound_);
     geometry_.markSourceDirty();
     polishAndUpdate();
     emit pathChanged();
@@ -716,6 +724,96 @@ void QDeclarativePolylineMapItem::removeCoordinate(int index)
 QDeclarativeMapLineProperties *QDeclarativePolylineMapItem::line()
 {
     return &line_;
+}
+
+QGeoCoordinate QDeclarativePolylineMapItem::computeLeftBound(const QList<QGeoCoordinate> &path,
+                                                             QVector<double> &deltaXs,
+                                                             double &minX)
+{
+    if (path.isEmpty()) {
+        minX = qInf();
+        return QGeoCoordinate();
+    }
+    deltaXs.resize(path.size());
+
+    deltaXs[0] = minX = 0.0;
+    int minId = 0;
+
+    for (int i = 1; i < path.size(); i++) {
+        const QGeoCoordinate &geoFrom = path.at(i-1);
+        const QGeoCoordinate &geoTo   = path.at(i);
+        double longiFrom    = geoFrom.longitude();
+        double longiTo      = geoTo.longitude();
+        double deltaLongi = longiTo - longiFrom;
+        if (qAbs(deltaLongi) > 180.0) {
+            if (longiTo > 0.0)
+                longiTo -= 360.0;
+            else
+                longiTo += 360.0;
+            deltaLongi =  longiTo - longiFrom;
+        }
+        deltaXs[i] = deltaXs[i-1] + deltaLongi;
+        if (deltaXs[i] < minX) {
+            minX = deltaXs[i];
+            minId = i;
+        }
+    }
+    return path.at(minId);
+}
+
+QGeoCoordinate QDeclarativePolylineMapItem::updateLeftBound(const QList<QGeoCoordinate> &path,
+                                                            QVector<double> &deltaXs,
+                                                            double &minX,
+                                                            QGeoCoordinate currentLeftBound)
+{
+    if (path.isEmpty()) {
+        deltaXs.clear();
+        minX = qInf();
+        return QGeoCoordinate();
+    } else if (path.size() == 1) {
+        deltaXs.resize(1);
+        deltaXs[0] = minX = 0.0;
+        return path.last();
+    } else if ( path.size() != deltaXs.size() + 1 ) {  // something went wrong. This case should not happen
+        return computeLeftBound(path, deltaXs, minX);
+    }
+
+    const QGeoCoordinate &geoFrom = path.at(path.size()-2);
+    const QGeoCoordinate &geoTo   = path.last();
+    double longiFrom    = geoFrom.longitude();
+    double longiTo      = geoTo.longitude();
+    double deltaLongi = longiTo - longiFrom;
+    if (qAbs(deltaLongi) > 180.0) {
+        if (longiTo > 0.0)
+            longiTo -= 360.0;
+        else
+            longiTo += 360.0;
+        deltaLongi =  longiTo - longiFrom;
+    }
+
+    deltaXs.push_back(deltaXs.last() + deltaLongi);
+    if (deltaXs.last() < minX) {
+        minX = deltaXs.last();
+        return path.last();
+    } else {
+        return currentLeftBound;
+    }
+}
+
+QGeoCoordinate QDeclarativePolylineMapItem::getLeftBound(const QList<QGeoCoordinate> &path,
+                                                         QVector<double> &deltaXs,
+                                                         double &minX)
+{
+    return QDeclarativePolylineMapItem::computeLeftBound(path, deltaXs, minX);
+}
+
+// Optimizing the common addCoordinate() path
+QGeoCoordinate QDeclarativePolylineMapItem::getLeftBound(const QList<QGeoCoordinate> &path,
+                                                         QVector<double> &deltaXs,
+                                                         double &minX,
+                                                         QGeoCoordinate currentLeftBound)
+{
+    return QDeclarativePolylineMapItem::updateLeftBound(path, deltaXs, minX, currentLeftBound);
 }
 
 /*!
@@ -756,10 +854,9 @@ void QDeclarativePolylineMapItem::geometryChanged(const QRectF &newGeometry, con
             path_.replace(i, coord);
         }
 
-        QGeoCoordinate leftBoundCoord = geometry_.geoLeftBound();
-        leftBoundCoord.setLongitude(QLocationUtils::wrapLong(leftBoundCoord.longitude()
-                           + newCoordinate.longitude() - firstLongitude));
-        geometry_.setPreserveGeometry(true, leftBoundCoord);
+        geoLeftBound_.setLongitude(QLocationUtils::wrapLong(geoLeftBound_.longitude()
+                                                            + newCoordinate.longitude() - firstLongitude));
+        geometry_.setPreserveGeometry(true, geoLeftBound_);
         geometry_.markSourceDirty();
         polishAndUpdate();
         emit pathChanged();
@@ -811,7 +908,7 @@ void QDeclarativePolylineMapItem::updatePolish()
     QScopedValueRollback<bool> rollback(updatingGeometry_);
     updatingGeometry_ = true;
 
-    geometry_.updateSourcePoints(*map(), path_);
+    geometry_.updateSourcePoints(*map(), path_, geoLeftBound_);
     geometry_.updateScreenPoints(*map(), line_.width());
 
     setWidth(geometry_.sourceBoundingBox().width());

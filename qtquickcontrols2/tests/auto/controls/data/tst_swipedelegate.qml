@@ -53,6 +53,87 @@ TestCase {
     readonly property int dragDistance: Math.max(20, Qt.styleHints.startDragDistance + 5)
 
     Component {
+        id: backgroundFillComponent
+        SwipeDelegate {
+            background: Item { anchors.fill: parent }
+        }
+    }
+
+    Component {
+        id: backgroundCenterInComponent
+        SwipeDelegate {
+            background: Item { anchors.centerIn: parent }
+        }
+    }
+
+    Component {
+        id: backgroundLeftComponent
+        SwipeDelegate {
+            background: Item { anchors.left: parent.left }
+        }
+    }
+
+    Component {
+        id: backgroundRightComponent
+        SwipeDelegate {
+            background: Item { anchors.right: parent.right }
+        }
+    }
+
+    Component {
+        id: contentItemFillComponent
+        SwipeDelegate {
+            contentItem: Item { anchors.fill: parent }
+        }
+    }
+
+    Component {
+        id: contentItemCenterInComponent
+        SwipeDelegate {
+            contentItem: Item { anchors.centerIn: parent }
+        }
+    }
+
+    Component {
+        id: contentItemLeftComponent
+        SwipeDelegate {
+            contentItem: Item { anchors.left: parent.left }
+        }
+    }
+
+    Component {
+        id: contentItemRightComponent
+        SwipeDelegate {
+            contentItem: Item { anchors.right: parent.right }
+        }
+    }
+
+    function test_horizontalAnchors_data() {
+        return [
+            { tag: "background, fill", component: backgroundFillComponent, itemName: "background", warningLocation: ":58:25" },
+            { tag: "background, centerIn", component: backgroundCenterInComponent, itemName: "background", warningLocation: ":65:25" },
+            { tag: "background, left", component: backgroundLeftComponent, itemName: "background", warningLocation: ":72:25" },
+            { tag: "background, right", component: backgroundRightComponent, itemName: "background", warningLocation: ":79:25" },
+            { tag: "contentItem, fill", component: contentItemFillComponent, itemName: "contentItem", warningLocation: ":86:26" },
+            { tag: "contentItem, centerIn", component: contentItemCenterInComponent, itemName: "contentItem", warningLocation: ":93:26" },
+            { tag: "contentItem, left", component: contentItemLeftComponent, itemName: "contentItem", warningLocation: ":100:26" },
+            { tag: "contentItem, right", component: contentItemRightComponent, itemName: "contentItem", warningLocation: ":107:26" }
+        ];
+    }
+
+    function test_horizontalAnchors(data) {
+        var warningMessage = Qt.resolvedUrl("tst_swipedelegate.qml") + data.warningLocation
+            + ": QML : SwipeDelegate: cannot use horizontal anchors with " + data.itemName + "; unable to layout the item."
+
+        ignoreWarning(warningMessage);
+
+        var control = data.component.createObject(testCase);
+        verify(control.contentItem);
+
+        control.destroy();
+    }
+
+    Component {
         id: greenLeftComponent
 
         Rectangle {
@@ -82,18 +163,6 @@ TestCase {
             swipe.left: greenLeftComponent
             swipe.right: redRightComponent
         }
-    }
-
-    function test_defaults() {
-        var control = swipeDelegateComponent.createObject(testCase);
-        verify(control);
-
-        compare(control.baselineOffset, control.contentItem.y + control.contentItem.baselineOffset);
-        compare(control.swipe.position, 0);
-        verify(!control.pressed);
-        verify(!control.swipe.complete);
-
-        control.destroy();
     }
 
     Component {
@@ -132,7 +201,7 @@ TestCase {
         verify(control);
 
         ignoreWarning(Qt.resolvedUrl("tst_swipedelegate.qml") +
-            ":78:9: QML SwipeDelegate: cannot set both behind and left/right properties")
+            ":159:9: QML SwipeDelegate: cannot set both behind and left/right properties")
         control.swipe.behind = itemComponent;
 
         // Shouldn't be any warnings when unsetting delegates.
@@ -141,7 +210,7 @@ TestCase {
 
         // right is still set.
         ignoreWarning(Qt.resolvedUrl("tst_swipedelegate.qml") +
-            ":78:9: QML SwipeDelegate: cannot set both behind and left/right properties")
+            ":159:9: QML SwipeDelegate: cannot set both behind and left/right properties")
         control.swipe.behind = itemComponent;
 
         control.swipe.right = null;
@@ -150,11 +219,11 @@ TestCase {
         control.swipe.behind = itemComponent;
 
         ignoreWarning(Qt.resolvedUrl("tst_swipedelegate.qml") +
-            ":78:9: QML SwipeDelegate: cannot set both behind and left/right properties")
+            ":159:9: QML SwipeDelegate: cannot set both behind and left/right properties")
         control.swipe.left = itemComponent;
 
         ignoreWarning(Qt.resolvedUrl("tst_swipedelegate.qml") +
-            ":78:9: QML SwipeDelegate: cannot set both behind and left/right properties")
+            ":159:9: QML SwipeDelegate: cannot set both behind and left/right properties")
         control.swipe.right = itemComponent;
 
         control.swipe.behind = null;
@@ -169,7 +238,7 @@ TestCase {
         var oldLeft = control.swipe.left;
         var oldLeftItem = control.swipe.leftItem;
         ignoreWarning(Qt.resolvedUrl("tst_swipedelegate.qml") +
-            ":78:9: QML SwipeDelegate: left/right/behind properties may only be set when swipe.position is 0")
+            ":159:9: QML SwipeDelegate: left/right/behind properties may only be set when swipe.position is 0")
         control.swipe.left = null;
         compare(control.swipe.left, oldLeft);
         compare(control.swipe.leftItem, oldLeftItem);
@@ -180,7 +249,7 @@ TestCase {
         var oldRight = control.swipe.right;
         var oldRightItem = control.swipe.rightItem;
         ignoreWarning(Qt.resolvedUrl("tst_swipedelegate.qml") +
-            ":78:9: QML SwipeDelegate: left/right/behind properties may only be set when swipe.position is 0")
+            ":159:9: QML SwipeDelegate: left/right/behind properties may only be set when swipe.position is 0")
         control.swipe.right = null;
         compare(control.swipe.right, oldRight);
         compare(control.swipe.rightItem, oldRightItem);
@@ -206,10 +275,22 @@ TestCase {
         var oldBehind = control.swipe.behind;
         var oldBehindItem = control.swipe.behindItem;
         ignoreWarning(Qt.resolvedUrl("tst_swipedelegate.qml") +
-            ":78:9: QML SwipeDelegate: left/right/behind properties may only be set when swipe.position is 0")
+            ":159:9: QML SwipeDelegate: left/right/behind properties may only be set when swipe.position is 0")
         control.swipe.behind = null;
         compare(control.swipe.behind, oldBehind);
         compare(control.swipe.behindItem, oldBehindItem);
+
+        control.destroy();
+    }
+
+    function test_defaults() {
+        var control = swipeDelegateComponent.createObject(testCase);
+        verify(control);
+
+        compare(control.baselineOffset, control.contentItem.y + control.contentItem.baselineOffset);
+        compare(control.swipe.position, 0);
+        verify(!control.pressed);
+        verify(!control.swipe.complete);
 
         control.destroy();
     }
@@ -426,25 +507,49 @@ TestCase {
         }
     }
 
+    Component {
+        id: signalSpyComponent
+
+        SignalSpy {}
+    }
+
     function test_eventsToLeftAndRight() {
         var control = swipeDelegateWithButtonComponent.createObject(testCase);
         verify(control);
 
         // The button should be pressed instead of the SwipeDelegate.
         mouseDrag(control, control.width / 2, control.height / 2,  -control.width, 0);
+        // Mouse has been released by this stage.
         verify(!control.pressed);
         compare(control.swipe.position, -1.0);
         verify(control.swipe.rightItem);
         verify(control.swipe.rightItem.visible);
         compare(control.swipe.rightItem.parent, control);
 
+        var buttonPressedSpy = signalSpyComponent.createObject(control, { target: control.swipe.rightItem, signalName: "pressed" });
+        verify(buttonPressedSpy);
+        verify(buttonPressedSpy.valid);
+        var buttonReleasedSpy = signalSpyComponent.createObject(control, { target: control.swipe.rightItem, signalName: "released" });
+        verify(buttonReleasedSpy);
+        verify(buttonReleasedSpy.valid);
+        var buttonClickedSpy = signalSpyComponent.createObject(control, { target: control.swipe.rightItem, signalName: "clicked" });
+        verify(buttonClickedSpy);
+        verify(buttonClickedSpy.valid);
+
+        // Now press the button.
         mousePress(control, control.width / 2, control.height / 2);
         verify(!control.pressed);
         var button = control.swipe.rightItem;
         verify(button.pressed);
+        compare(buttonPressedSpy.count, 1);
+        compare(buttonReleasedSpy.count, 0);
+        compare(buttonClickedSpy.count, 0);
 
         mouseRelease(control, control.width / 2, control.height / 2);
         verify(!button.pressed);
+        compare(buttonPressedSpy.count, 1);
+        compare(buttonReleasedSpy.count, 1);
+        compare(buttonClickedSpy.count, 1);
 
         // Returning back to a position of 0 and pressing on the control should
         // result in the control being pressed.
@@ -883,6 +988,48 @@ TestCase {
         compare(control.swipe.position, 0.2);
         mouseRelease(control, control.width / 2 - control.swipe.behindItem.width * 0.8, control.height / 2, Qt.LeftButton);
         compare(control.swipe.position, 0.0);
+
+        control.destroy();
+    }
+
+    // When the width of a SwipeDelegate changes (as it does upon portrait => landscape
+    // rotation, for example), the positions of the contentItem and background items
+    // should be updated accordingly.
+    function test_contentItemPosOnWidthChanged() {
+        var control = swipeDelegateComponent.createObject(testCase);
+        verify(control);
+
+        swipe(control, 0.0, 1.0);
+
+        var oldContentItemX = control.contentItem.x;
+        var oldBackgroundX = control.background.x;
+        control.width += 100;
+        compare(control.contentItem.x, oldContentItemX + 100);
+        compare(control.background.x, oldBackgroundX + 100);
+
+        control.destroy();
+    }
+
+    function test_contentItemHeightOnHeightChanged() {
+        var control = swipeDelegateComponent.createObject(testCase);
+        verify(control);
+
+        // Try when swipe.complete is false.
+        var originalHeight = control.height;
+        var originalContentItemHeight = control.contentItem.height;
+        verify(control.height !== 10);
+        control.height = 10;
+        compare(control.contentItem.height, control.availableHeight);
+        verify(control.contentItem.height < originalContentItemHeight);
+        compare(control.contentItem.y, control.topPadding);
+
+        // Try when swipe.complete is true.
+        control.height = originalHeight;
+        swipe(control, 0.0, 1.0);
+        control.height = 10;
+        compare(control.contentItem.height, control.availableHeight);
+        verify(control.contentItem.height < originalContentItemHeight);
+        compare(control.contentItem.y, control.topPadding);
 
         control.destroy();
     }

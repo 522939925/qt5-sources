@@ -42,17 +42,14 @@ T.RangeSlider {
     id: control
 
     implicitWidth: Math.max(background ? background.implicitWidth : 0,
-        Math.max(background ? background.implicitWidth : 0,
-            first.handle ? first.handle.implicitWidth : 0,
-                second.handle ? second.handle.implicitWidth : 0) + leftPadding + rightPadding)
+        Math.max(first.handle ? first.handle.implicitWidth : 0,
+                 second.handle ? second.handle.implicitWidth : 0) + leftPadding + rightPadding)
     implicitHeight: Math.max(background ? background.implicitHeight : 0,
-        Math.max(background ? background.implicitHeight : 0,
-            first.handle ? first.handle.implicitHeight : 0,
-                second.handle ? second.handle.implicitHeight : 0) + topPadding + bottomPadding)
+        Math.max(first.handle ? first.handle.implicitHeight : 0,
+                 second.handle ? second.handle.implicitHeight : 0) + topPadding + bottomPadding)
 
     padding: 6
 
-    //! [firstHandle]
     first.handle: Rectangle {
         implicitWidth: horizontal ? 8 : 24
         implicitHeight: horizontal ? 24 : 8
@@ -65,9 +62,7 @@ T.RangeSlider {
         radius: 4
         color: control.first.pressed ? control.Universal.chromeHighColor : control.enabled ? control.Universal.accent : control.Universal.chromeDisabledHighColor
     }
-    //! [firstHandle]
 
-    //! [secondHandle]
     second.handle: Rectangle {
         implicitWidth: horizontal ? 8 : 24
         implicitHeight: horizontal ? 24 : 8
@@ -80,9 +75,7 @@ T.RangeSlider {
         radius: 4
         color: control.second.pressed ? control.Universal.chromeHighColor : control.enabled ? control.Universal.accent : control.Universal.chromeDisabledHighColor
     }
-    //! [secondHandle]
 
-    //! [background]
     background: Item {
         implicitWidth: horizontal ? 200 : 18
         implicitHeight: horizontal ? 18 : 200
@@ -114,5 +107,4 @@ T.RangeSlider {
             color: control.enabled ? control.Universal.accent : control.Universal.chromeDisabledHighColor
         }
     }
-    //! [background]
 }

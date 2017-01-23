@@ -38,6 +38,7 @@
 #define QWAYLANDQUICKSHELLSURFACEITEM_P_H
 
 #include <QtWaylandCompositor/private/qwaylandquickitem_p.h>
+#include <QtCore/QBasicTimer>
 
 QT_BEGIN_NAMESPACE
 
@@ -76,6 +77,30 @@ public:
     QWaylandQuickShellIntegration(QObject *parent = nullptr) : QObject(parent) {}
     virtual bool mouseMoveEvent(QMouseEvent *) { return false; }
     virtual bool mouseReleaseEvent(QMouseEvent *) { return false; }
+};
+
+class Q_WAYLAND_COMPOSITOR_EXPORT QWaylandQuickShellEventFilter : public QObject
+{
+    Q_OBJECT
+public:
+    typedef void (*CallbackFunction)(void);
+    static void startFilter(QWaylandClient *client, CallbackFunction closePopupCallback);
+    static void cancelFilter();
+
+protected:
+    void timerEvent(QTimerEvent *event) Q_DECL_OVERRIDE;
+
+private:
+    void stopFilter();
+
+    QWaylandQuickShellEventFilter(QObject *parent = nullptr);
+    bool eventFilter(QObject *, QEvent *) Q_DECL_OVERRIDE;
+    bool eventFilterInstalled;
+    bool waitForRelease;
+    QPointer<QWaylandClient> client;
+    CallbackFunction closePopups;
+    QBasicTimer mousePressTimeout;
+    static QWaylandQuickShellEventFilter *self;
 };
 
 QT_END_NAMESPACE

@@ -55,48 +55,77 @@ Viewport {
     id: root
     normalizedRect : Qt.rect(0.0, 0.0, 1.0, 1.0)
 
-    property alias gBuffer : gBufferTargetSelector.target
+    property GBuffer gBuffer
     property alias camera : sceneCameraSelector.camera
+    property alias sceneLayer: sceneLayerFilter.layers
+    property alias screenQuadLayer: screenQuadLayerFilter.layers
+    property alias debugLayer: debugLayerFilter.layers
 
-    readonly property Layer sceneLayer: Layer {}
-    readonly property Layer screenQuadLayer: Layer {}
+    readonly property real windowWidth: surfaceSelector.surface !== null ? surfaceSelector.surface.width: 0
+    readonly property real windowHeight: surfaceSelector.surface !== null ? surfaceSelector.surface.height: 0
 
     RenderSurfaceSelector {
-        LayerFilter {
-            layers : root.sceneLayer
+        id: surfaceSelector
 
-            RenderTargetSelector {
-                id : gBufferTargetSelector
+        CameraSelector {
+            id : sceneCameraSelector
 
-                ClearBuffers {
-                    buffers: ClearBuffers.ColorDepthBuffer
+            // Fill G-Buffer
+            LayerFilter {
+                id: sceneLayerFilter
+                RenderTargetSelector {
+                    id : gBufferTargetSelector
+                    target: gBuffer
 
-                    RenderPassFilter {
-                        id : geometryPass
-                        matchAny : FilterKey { name : "pass"; value : "geometry" }
+                    ClearBuffers {
+                        buffers: ClearBuffers.ColorDepthBuffer
 
-                        CameraSelector {
-                            id : sceneCameraSelector
+                        RenderPassFilter {
+                            id : geometryPass
+                            matchAny : FilterKey { name : "pass"; value : "geometry" }
                         }
                     }
                 }
             }
-        }
 
-        LayerFilter {
-            layers : root.screenQuadLayer
+            TechniqueFilter {
+                parameters: [
+                    Parameter { name: "color"; value : gBuffer.color },
+                    Parameter { name: "position"; value : gBuffer.position },
+                    Parameter { name: "normal"; value : gBuffer.normal },
+                    Parameter { name: "depth"; value : gBuffer.depth },
+                    Parameter { name: "winSize"; value : Qt.size(1024, 1024) }
+                ]
 
-            ClearBuffers {
-                buffers: ClearBuffers.ColorDepthBuffer
+                RenderStateSet {
+                    // Render FullScreen Quad
+                    renderStates: [
+                        BlendEquation { blendFunction: BlendEquation.Add },
+                        BlendEquationArguments { sourceRgb: BlendEquationArguments.SourceAlpha; destinationRgb: BlendEquationArguments.DestinationColor }
+                    ]
+                    LayerFilter {
+                        id: screenQuadLayerFilter
+                        ClearBuffers {
+                            buffers: ClearBuffers.ColorDepthBuffer
+                            RenderPassFilter {
+                                matchAny : FilterKey { name : "pass"; value : "final" }
+                                parameters: Parameter { name: "winSize"; value : Qt.size(windowWidth, windowHeight) }
 
-                RenderPassFilter {
-                    id : finalPass
-                    matchAny : FilterKey { name : "pass"; value : "final" }
-                    CameraSelector {
-                        camera: sceneCameraSelector.camera
+                            }
+                        }
+                    }
+                    // RenderDebug layer
+                    LayerFilter {
+                        id: debugLayerFilter
+                        Viewport {
+                            normalizedRect : Qt.rect(0.5, 0.5, 0.5, 0.5)
+                            RenderPassFilter {
+                                matchAny : FilterKey { name : "pass"; value : "final" }
+                                parameters: Parameter { name: "winSize"; value : Qt.size(windowWidth * 0.5, windowHeight * 0.5) }
+                            }
+                        }
                     }
                 }
-
             }
         }
     }

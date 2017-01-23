@@ -173,6 +173,7 @@ private Q_SLOTS:
     void mappingManagerInitialized();
     void pluginReady();
     void onMapChildrenChanged();
+    void onSupportedMapTypesChanged();
 
 private:
     void setupMapView(QDeclarativeGeoMapItemView *view);
@@ -203,6 +204,7 @@ private:
     bool m_copyrightsVisible;
     double m_maximumViewportLatitude;
     bool m_initialized;
+    bool m_validRegion;
 
     friend class QDeclarativeGeoMapItem;
     friend class QDeclarativeGeoMapItemView;

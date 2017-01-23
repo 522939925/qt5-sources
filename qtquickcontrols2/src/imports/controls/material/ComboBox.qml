@@ -56,25 +56,23 @@ T.ComboBox {
     spacing: 6
     padding: 16
 
-    //! [delegate]
+    // Don't use toolTextColor, as that is often white when we have a white background.
+    Material.foreground: Material.foreground === Material.toolTextColor ? undefined : Material.foreground
+
     delegate: MenuItem {
-        width: control.width
+        width: control.popup.width
         text: control.textRole ? (Array.isArray(control.model) ? modelData[control.textRole] : model[control.textRole]) : modelData
         Material.foreground: control.currentIndex === index ? control.Material.accent : control.Material.foreground
         highlighted: control.highlightedIndex === index
     }
-    //! [delegate]
 
-    //! [indicator]
     indicator: Image {
         x: control.mirrored ? control.leftPadding : control.width - width - control.rightPadding
         y: control.topPadding + (control.availableHeight - height) / 2
         opacity: !control.enabled ? 0.5 : 1.0
         source: "qrc:/qt-project.org/imports/QtQuick/Controls.2/Material/images/drop-indicator.png"
     }
-    //! [indicator]
 
-    //! [contentItem]
     contentItem: Text {
         leftPadding: control.mirrored && control.indicator ? control.indicator.width + control.spacing : 0
         rightPadding: !control.mirrored && control.indicator ? control.indicator.width + control.spacing : 0
@@ -86,9 +84,7 @@ T.ComboBox {
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
-    //! [contentItem]
 
-    //! [background]
     background: Rectangle {
         implicitWidth: 120
         implicitHeight: 48
@@ -115,12 +111,10 @@ T.ComboBox {
             color: control.Material.checkBoxUncheckedRippleColor
         }
     }
-    //! [background]
 
-    //! [popup]
     popup: T.Popup {
         width: control.width
-        implicitHeight: listview.contentHeight
+        implicitHeight: contentItem.implicitHeight
         transformOrigin: Item.Top
         topMargin: 12
         bottomMargin: 12
@@ -142,16 +136,18 @@ T.ComboBox {
         }
 
         contentItem: ListView {
-            id: listview
             clip: true
+            implicitHeight: contentHeight
             model: control.popup.visible ? control.delegateModel : null
             currentIndex: control.highlightedIndex
+            highlightRangeMode: ListView.ApplyRange
+            highlightMoveDuration: 0
 
             T.ScrollIndicator.vertical: ScrollIndicator { }
         }
 
         background: Rectangle {
-            radius: 3
+            radius: 2
             color: control.Material.dialogColor
 
             layer.enabled: control.enabled
@@ -160,5 +156,4 @@ T.ComboBox {
             }
         }
     }
-    //! [popup]
 }

@@ -21,8 +21,6 @@ defineTest(runConfigure) {
     }
 
     linux {
-        # libcap-dev package doesn't ship .pc files on Ubuntu.
-        !config_libcap:skipBuild("libcap development package appears to be missing")
         !config_khr:skipBuild("khronos development headers appear to be missing (mesa/libegl1-mesa-dev)")
 
         REQUIRED_PACKAGES = dbus-1 fontconfig
@@ -117,11 +115,19 @@ defineTest(finalizeConfigure) {
     } else {
         log("Proprietary codecs (H264, MP3).... Not enabled         (Default, enable with WEBENGINE_CONFIG+=use_proprietary_codecs)$${EOL}")
     }
+    qtHaveModule(positioning): {
+        log("Geolocation....................... Enabled$${EOL}")
+    } else {
+        log("Geolocation....................... Not enabled         (Requires Qt Positioning module)$${EOL}")
+    }
     osx {
         use?(appstore_compliant_code) {
             log("AppStore Compliant ............... Enabled$${EOL}")
         } else {
             log("AppStore Compliant ............... Not enabled         (Default, enable with WEBENGINE_CONFIG+=use_appstore_compliant_code)$${EOL}")
+        }
+        !isMinOSXSDKVersion(10, 10, 3) {
+            log("Force Touch API usage ............ Not enabled         (Because the OS X SDK version to be used \"$${WEBENGINE_OSX_SDK_PRODUCT_VERSION}\" is lower than the required \"10.10.3\")$${EOL}")
         }
     }
 }

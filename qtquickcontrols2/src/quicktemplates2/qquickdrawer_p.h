@@ -87,7 +87,7 @@ protected:
     void mouseUngrabEvent() override;
     bool overlayEvent(QQuickItem *item, QEvent *event) override;
 
-    void componentComplete() override;
+    void geometryChanged(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
 private:
     Q_DISABLE_COPY(QQuickDrawer)

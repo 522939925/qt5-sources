@@ -347,6 +347,7 @@ void LineChartItem::handleUpdated()
     bool doGeometryUpdate =
         (m_pointsVisible != m_series->pointsVisible())
         || (m_series->pointsVisible() && (m_linePen != m_series->pen()));
+    bool visibleChanged = m_series->isVisible() != isVisible();
     setVisible(m_series->isVisible());
     setOpacity(m_series->opacity());
     m_pointsVisible = m_series->pointsVisible();
@@ -358,6 +359,8 @@ void LineChartItem::handleUpdated()
     m_pointLabelsClipping = m_series->pointLabelsClipping();
     if (doGeometryUpdate)
         updateGeometry();
+    else if (m_series->useOpenGL() && visibleChanged)
+        refreshGlChart();
     update();
 }
 
@@ -370,6 +373,14 @@ void LineChartItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opt
         return;
 
     QRectF clipRect = QRectF(QPointF(0, 0), domain()->size());
+    // Adjust clip rect half a pixel in required dimensions to make it include lines along the
+    // plot area edges, but never increase clip so much that any portion of the line is draw beyond
+    // the plot area.
+    const qreal x1 = pos().x() - int(pos().x());
+    const qreal y1 = pos().y() - int(pos().y());
+    const qreal x2 = (clipRect.width() + 0.5) - int(clipRect.width() + 0.5);
+    const qreal y2 = (clipRect.height() + 0.5) - int(clipRect.height() + 0.5);
+    clipRect.adjust(-x1, -y1, qMax(x1, x2), qMax(y1, y2));
 
     painter->save();
     painter->setPen(m_linePen);
@@ -392,8 +403,6 @@ void LineChartItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opt
         painter->setClipRect(clipRect);
     }
 
-    reversePainter(painter, clipRect);
-
     if (m_pointsVisible) {
         painter->setBrush(m_linePen.color());
         painter->drawPath(m_linePath);
@@ -408,8 +417,6 @@ void LineChartItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opt
                 painter->drawLine(m_linePoints.at(i - 1), m_linePoints.at(i));
         }
     }
-
-    reversePainter(painter, clipRect);
 
     if (m_pointLabelsVisible) {
         if (m_pointLabelsClipping)

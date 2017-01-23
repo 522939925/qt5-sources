@@ -45,5 +45,17 @@ contains(QT_CONFIG, private_tests) {
         trianglesextractor \
         triangleboundingvolume \
         ddstextures \
-        shadercache
+        shadercache \
+        layerfiltering \
+        filterentitybycomponent \
+        genericlambdajob \
+        qgraphicsapifilter \
+        qrendersurfaceselector \
+        sortpolicy \
+        sceneloader \
+        qsceneloader \
+        qrendertargetoutput \
+        qcameralens \
+        qcomputecommand \
+        loadscenejob
 }

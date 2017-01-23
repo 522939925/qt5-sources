@@ -92,7 +92,7 @@ QT_BEGIN_NAMESPACE
 
 // Used for very high-level info about the renderering and gl context
 // Includes GL_VERSION, type of render loop, atlas size, etc.
-Q_LOGGING_CATEGORY(QSG_LOG_INFO,                "qt.scenegraph.info")
+Q_LOGGING_CATEGORY(QSG_LOG_INFO,                "qt.scenegraph.general")
 
 // Used to debug the renderloop logic. Primarily useful for platform integrators
 // and when investigating the render loop logic.
@@ -490,10 +490,6 @@ QSurfaceFormat QSGContext::defaultSurfaceFormat() const
 
 QSize QSGContext::minimumFBOSize() const
 {
-#ifdef Q_OS_MAC
-    if (QSysInfo::MacintoshVersion < QSysInfo::MV_10_8)
-        return QSize(33, 33);
-#endif
     return QSize(1, 1);
 }
 
@@ -631,12 +627,12 @@ void QSGRenderContext::initialize(QOpenGLContext *context)
 
 #ifdef Q_OS_LINUX
     const char *vendor = (const char *) funcs->glGetString(GL_VENDOR);
-    if (strstr(vendor, "nouveau"))
+    if (vendor && strstr(vendor, "nouveau"))
         m_brokenIBOs = true;
     const char *renderer = (const char *) funcs->glGetString(GL_RENDERER);
-    if (strstr(renderer, "llvmpipe"))
+    if (renderer && strstr(renderer, "llvmpipe"))
         m_serializedRender = true;
-    if (strstr(vendor, "Hisilicon Technologies") && strstr(renderer, "Immersion.16"))
+    if (vendor && renderer && strstr(vendor, "Hisilicon Technologies") && strstr(renderer, "Immersion.16"))
         m_brokenIBOs = true;
 #endif
 

@@ -859,17 +859,19 @@ void QMediaPlayer::play()
     }
 
     //if playlist control is available, the service should advance itself
-    if (d->rootMedia.playlist() && d->rootMedia.playlist()->currentIndex() == -1 && !d->rootMedia.playlist()->isEmpty()) {
-
+    if (d->rootMedia.playlist() && !d->rootMedia.playlist()->isEmpty()) {
         // switch to playing state
         if (d->state != QMediaPlayer::PlayingState)
             d->_q_stateChanged(QMediaPlayer::PlayingState);
 
-        if (d->playlist != d->rootMedia.playlist())
-            d->setPlaylist(d->rootMedia.playlist());
-        Q_ASSERT(d->playlist == d->rootMedia.playlist());
-        emit currentMediaChanged(d->rootMedia);
-        d->playlist->setCurrentIndex(0);
+        if (d->rootMedia.playlist()->currentIndex() == -1) {
+            if (d->playlist != d->rootMedia.playlist())
+                d->setPlaylist(d->rootMedia.playlist());
+            Q_ASSERT(d->playlist == d->rootMedia.playlist());
+
+            emit currentMediaChanged(d->rootMedia);
+            d->playlist->setCurrentIndex(0);
+        }
     }
 
     // Reset error conditions
@@ -960,8 +962,8 @@ void QMediaPlayer::setPlaybackRate(qreal rate)
     Sets the current \a media source.
 
     If a \a stream is supplied; media data will be read from it instead of resolving the media
-    source.  In this case the media source may still be used to resolve additional information
-    about the media such as mime type.
+    source. In this case the media source may still be used to resolve additional information
+    about the media such as mime type. The \a stream must be open and readable.
 
     Setting the media to a null QMediaContent will cause the player to discard all
     information relating to the current media source and to cease all I/O operations related

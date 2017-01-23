@@ -65,7 +65,7 @@ QT_BEGIN_NAMESPACE
 
 static QStringList portNamesFromHardwareDeviceMap()
 {
-    HKEY hKey = Q_NULLPTR;
+    HKEY hKey = nullptr;
     if (::RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
         return QStringList();
 
@@ -82,7 +82,7 @@ static QStringList portNamesFromHardwareDeviceMap()
     for (;;) {
         DWORD requiredValueNameChars = MaximumValueNameInChars;
         const LONG ret = ::RegEnumValue(hKey, index, &outputValueName[0], &requiredValueNameChars,
-                                        Q_NULLPTR, Q_NULLPTR, reinterpret_cast<PBYTE>(&outputBuffer[0]), &bytesRequired);
+                                        nullptr, nullptr, reinterpret_cast<PBYTE>(&outputBuffer[0]), &bytesRequired);
         if (ret == ERROR_MORE_DATA) {
             outputBuffer.resize(bytesRequired / sizeof(wchar_t) + 2, 0);
         } else if (ret == ERROR_SUCCESS) {
@@ -158,15 +158,15 @@ static QString devicePortName(HDEVINFO deviceInfoSet, PSP_DEVINFO_DATA deviceInf
             L"PortNumber\0"
     };
 
-    static const int keyTokensCount = sizeof(keyTokens) / sizeof(keyTokens[0]);
+    enum { KeyTokensCount = sizeof(keyTokens) / sizeof(keyTokens[0]) };
 
     QString portName;
-    for (int i = 0; i < keyTokensCount; ++i) {
+    for (int i = 0; i < KeyTokensCount; ++i) {
         DWORD dataType = 0;
         std::vector<wchar_t> outputBuffer(MAX_PATH + 1, 0);
         DWORD bytesRequired = MAX_PATH;
         for (;;) {
-            const LONG ret = ::RegQueryValueEx(key, keyTokens[i], Q_NULLPTR, &dataType,
+            const LONG ret = ::RegQueryValueEx(key, keyTokens[i], nullptr, &dataType,
                                                reinterpret_cast<PBYTE>(&outputBuffer[0]), &bytesRequired);
             if (ret == ERROR_MORE_DATA) {
                 outputBuffer.resize(bytesRequired / sizeof(wchar_t) + 2, 0);
@@ -186,23 +186,6 @@ static QString devicePortName(HDEVINFO deviceInfoSet, PSP_DEVINFO_DATA deviceInf
     ::RegCloseKey(key);
     return portName;
 }
-
-class SerialPortNameEqualFunctor
-{
-public:
-    explicit SerialPortNameEqualFunctor(const QString &serialPortName)
-        : m_serialPortName(serialPortName)
-    {
-    }
-
-    bool operator() (const QSerialPortInfo &serialPortInfo) const
-    {
-        return serialPortInfo.portName() == m_serialPortName;
-    }
-
-private:
-    const QString &m_serialPortName;
-};
 
 static QString deviceDescription(HDEVINFO deviceInfoSet,
                                  PSP_DEVINFO_DATA deviceInfoData)
@@ -288,6 +271,15 @@ static QString deviceSerialNumber(QString instanceIdentifier,
     return QString();
 }
 
+static bool anyOfPorts(const QList<QSerialPortInfo> &ports, const QString &portName)
+{
+    const auto end = ports.end();
+    auto isPortNamesEquals = [&portName](const QSerialPortInfo &portInfo) {
+        return portInfo.portName() == portName;
+    };
+    return std::find_if(ports.begin(), end, isPortNamesEquals) != end;
+}
+
 QList<QSerialPortInfo> QSerialPortInfo::availablePorts()
 {
     static const struct {
@@ -299,12 +291,12 @@ QList<QSerialPortInfo> QSerialPortInfo::availablePorts()
         { GUID_DEVINTERFACE_MODEM, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE }
     };
 
-    static const int setupTokensCount = sizeof(setupTokens) / sizeof(setupTokens[0]);
+    enum { SetupTokensCount = sizeof(setupTokens) / sizeof(setupTokens[0]) };
 
     QList<QSerialPortInfo> serialPortInfoList;
 
-    for (int i = 0; i < setupTokensCount; ++i) {
-        const HDEVINFO deviceInfoSet = ::SetupDiGetClassDevs(&setupTokens[i].guid, Q_NULLPTR, Q_NULLPTR, setupTokens[i].flags);
+    for (int i = 0; i < SetupTokensCount; ++i) {
+        const HDEVINFO deviceInfoSet = ::SetupDiGetClassDevs(&setupTokens[i].guid, nullptr, nullptr, setupTokens[i].flags);
         if (deviceInfoSet == INVALID_HANDLE_VALUE)
             return serialPortInfoList;
 
@@ -318,10 +310,8 @@ QList<QSerialPortInfo> QSerialPortInfo::availablePorts()
             if (portName.isEmpty() || portName.contains(QLatin1String("LPT")))
                 continue;
 
-            if (std::find_if(serialPortInfoList.begin(), serialPortInfoList.end(),
-                             SerialPortNameEqualFunctor(portName)) != serialPortInfoList.end()) {
+            if (anyOfPorts(serialPortInfoList, portName))
                 continue;
-            }
 
             QSerialPortInfoPrivate priv;
 
@@ -346,8 +336,7 @@ QList<QSerialPortInfo> QSerialPortInfo::availablePorts()
 
     const auto portNames = portNamesFromHardwareDeviceMap();
     for (const QString &portName : portNames) {
-        if (std::find_if(serialPortInfoList.cbegin(), serialPortInfoList.cend(),
-                         SerialPortNameEqualFunctor(portName)) == serialPortInfoList.cend()) {
+        if (!anyOfPorts(serialPortInfoList, portName)) {
             QSerialPortInfoPrivate priv;
             priv.portName = portName;
             priv.device =  QSerialPortInfoPrivate::portNameToSystemLocation(portName);
@@ -362,7 +351,7 @@ QList<QSerialPortInfo> QSerialPortInfo::availablePorts()
 bool QSerialPortInfo::isBusy() const
 {
     const HANDLE handle = ::CreateFile(reinterpret_cast<const wchar_t*>(systemLocation().utf16()),
-                                           GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, Q_NULLPTR);
+                                           GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
 
     if (handle == INVALID_HANDLE_VALUE) {
         if (::GetLastError() == ERROR_ACCESS_DENIED)
@@ -378,7 +367,7 @@ bool QSerialPortInfo::isBusy() const
 bool QSerialPortInfo::isValid() const
 {
     const HANDLE handle = ::CreateFile(reinterpret_cast<const wchar_t*>(systemLocation().utf16()),
-                                           GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, Q_NULLPTR);
+                                           GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
 
     if (handle == INVALID_HANDLE_VALUE) {
         if (::GetLastError() != ERROR_ACCESS_DENIED)

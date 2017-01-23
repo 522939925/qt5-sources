@@ -33,6 +33,7 @@
 #include <qregexp.h>
 #include <qcryptographichash.h>
 #include <qdebug.h>
+#include <qsettings.h>
 #include <qstring.h>
 #include <stdlib.h>
 #include <time.h>
@@ -488,6 +489,32 @@ static QString xcodeFiletypeForFilename(const QString &filename)
         return QStringLiteral("text");
 
     return QString();
+}
+
+static bool compareProvisioningTeams(const QVariantMap &a, const QVariantMap &b)
+{
+    int aFree = a.value(QLatin1String("isFreeProvisioningTeam")).toBool() ? 1 : 0;
+    int bFree = b.value(QLatin1String("isFreeProvisioningTeam")).toBool() ? 1 : 0;
+    return aFree < bFree;
+}
+
+static QList<QVariantMap> provisioningTeams()
+{
+    const QSettings xcodeSettings(
+        QDir::homePath() + QLatin1String("/Library/Preferences/com.apple.dt.Xcode.plist"),
+        QSettings::NativeFormat);
+    const QVariantMap teamMap = xcodeSettings.value(QLatin1String("IDEProvisioningTeams")).toMap();
+    QList<QVariantMap> flatTeams;
+    for (QVariantMap::const_iterator it = teamMap.begin(), end = teamMap.end(); it != end; ++it) {
+        const QString emailAddress = it.key();
+        QVariantMap team = it.value().toMap();
+        team[QLatin1String("emailAddress")] = emailAddress;
+        flatTeams.append(team);
+    }
+
+    // Sort teams so that Free Provisioning teams come last
+    std::sort(flatTeams.begin(), flatTeams.end(), ::compareProvisioningTeams);
+    return flatTeams;
 }
 
 bool
@@ -1403,6 +1430,14 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
         QString configName = (as_release ? "Release" : "Debug");
 
         QMap<QString, QString> settings;
+        if (!project->isActiveConfig("no_xcode_development_team")) {
+            const QList<QVariantMap> teams = provisioningTeams();
+            if (!teams.isEmpty()) {
+                // first suitable team we find is the one we'll use by default
+                settings.insert("DEVELOPMENT_TEAM",
+                    teams.first().value(QLatin1String("teamID")).toString());
+            }
+        }
         settings.insert("COPY_PHASE_STRIP", (as_release ? "YES" : "NO"));
         // Bitcode is only supported with a deployment target >= iOS 6.0.
         // Disable it for now, and consider switching it on when later

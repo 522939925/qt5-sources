@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2016 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the test suite of the Qt Toolkit.
@@ -51,19 +51,38 @@ TestCase {
     name: "Tumbler"
 
     property var tumbler: null
+    // With the help of cleanup(), ensures that all items created during a test function
+    // are destroyed if that test fails.
+    property Item cleanupItem
     readonly property real implicitTumblerWidth: 60
     readonly property real implicitTumblerHeight: 200
     readonly property real defaultImplicitDelegateHeight: implicitTumblerHeight / 3
     readonly property real defaultListViewTumblerOffset: -defaultImplicitDelegateHeight
 
+    Component {
+        id: itemComponent
+
+        Item {
+            anchors.fill: parent
+        }
+    }
+
     function init() {
-        tumbler = Qt.createQmlObject("import QtQuick.Controls 2.0; Tumbler { }", testCase, "");
-        verify(tumbler, "Tumbler: failed to create an instance");
-        compare(tumbler.contentItem.parent, tumbler);
+        cleanupItem = itemComponent.createObject(testCase);
+        verify(cleanupItem);
     }
 
     function cleanup() {
-        tumbler.destroy();
+        var destroyed = false;
+        cleanupItem.Component.destruction.connect(function() { destroyed = true; });
+
+        cleanupItem.destroy();
+
+        // Waiting until it's deleted before continuing makes debugging
+        // test failures much easier, because there aren't unrelated items hanging around.
+        // TODO: Replace with tryVerify(!tumbler) in 5.8.
+        while (!destroyed)
+            wait(0)
     }
 
     function tumblerXCenter() {
@@ -92,11 +111,21 @@ TestCase {
         }
     }
 
-    function tst_dynamicContentItemChange() {
-        // test that currentIndex is maintained between contentItem changes...
+    Component {
+        id: tumblerComponent
+
+        Tumbler {}
     }
 
+    // TODO: test that currentIndex is maintained between contentItem changes...
+//    function tst_dynamicContentItemChange() {
+//    }
+
     function test_currentIndex() {
+        tumbler = tumblerComponent.createObject(cleanupItem);
+        verify(tumbler);
+        compare(tumbler.contentItem.parent, tumbler);
+
         tumbler.model = 5;
 
         compare(tumbler.currentIndex, 0);
@@ -122,6 +151,9 @@ TestCase {
     }
 
     function test_keyboardNavigation() {
+        tumbler = tumblerComponent.createObject(cleanupItem);
+        verify(tumbler);
+
         tumbler.model = 5;
         tumbler.forceActiveFocus();
         tumbler.contentItem.highlightMoveDuration = 0;
@@ -150,6 +182,9 @@ TestCase {
     }
 
     function test_itemsCorrectlyPositioned() {
+        tumbler = tumblerComponent.createObject(cleanupItem);
+        verify(tumbler);
+
         tumbler.model = 4;
         tumbler.height = 120;
         compare(tumbler.contentItem.delegateHeight, 40);
@@ -158,7 +193,7 @@ TestCase {
         wait(tumbler.contentItem.highlightMoveDuration);
         var firstItemCenterPos = itemCenterPos(1);
         var firstItem = tumbler.contentItem.itemAt(firstItemCenterPos.x, firstItemCenterPos.y);
-        var actualPos = testCase.mapFromItem(firstItem, 0, 0);
+        var actualPos = cleanupItem.mapFromItem(firstItem, 0, 0);
         compare(actualPos.x, tumbler.leftPadding);
         compare(actualPos.y, tumbler.topPadding + 40);
 
@@ -169,7 +204,7 @@ TestCase {
         firstItem = tumbler.contentItem.itemAt(firstItemCenterPos.x, firstItemCenterPos.y);
         verify(firstItem);
         // Test QTBUG-40298.
-        actualPos = testCase.mapFromItem(firstItem, 0, 0);
+        actualPos = cleanupItem.mapFromItem(firstItem, 0, 0);
         compare(actualPos.x, tumbler.leftPadding);
         compare(actualPos.y, tumbler.topPadding);
 
@@ -186,8 +221,11 @@ TestCase {
     }
 
     function test_focusPastTumbler() {
+        tumbler = tumblerComponent.createObject(cleanupItem);
+        verify(tumbler);
+
         var mouseArea = Qt.createQmlObject(
-            "import QtQuick 2.2; TextInput { activeFocusOnTab: true; width: 50; height: 50 }", testCase, "");
+            "import QtQuick 2.2; TextInput { activeFocusOnTab: true; width: 50; height: 50 }", cleanupItem, "");
 
         tumbler.forceActiveFocus();
         verify(tumbler.activeFocus);
@@ -195,16 +233,12 @@ TestCase {
         keyClick(Qt.Key_Tab);
         verify(!tumbler.activeFocus);
         verify(mouseArea.activeFocus);
-
-        mouseArea.destroy();
     }
 
     function test_datePicker() {
-        tumbler.destroy();
-
         var component = Qt.createComponent("TumblerDatePicker.qml");
         compare(component.status, Component.Ready, component.errorString());
-        tumbler = component.createObject(testCase);
+        tumbler = component.createObject(cleanupItem);
         // Should not be any warnings.
 
         compare(tumbler.dayTumbler.currentIndex, 0);
@@ -232,6 +266,44 @@ TestCase {
         tumbler.monthTumbler.currentIndex = 1;
         tryCompare(tumbler.monthTumbler, "currentIndex", 1);
         tryCompare(tumbler.dayTumbler, "currentIndex", 27);
+    }
+
+    Component {
+        id: timePickerComponent
+
+        Row {
+            property alias minuteTumbler: minuteTumbler
+            property alias amPmTumbler: amPmTumbler
+
+            Tumbler {
+                id: minuteTumbler
+                currentIndex: 6
+                model: 60
+                width: 50
+                height: 150
+            }
+
+            Tumbler {
+                id: amPmTumbler
+                model: ["AM", "PM"]
+                width: 50
+                height: 150
+                contentItem: ListView {
+                    anchors.fill: parent
+                    model: amPmTumbler.model
+                    delegate: amPmTumbler.delegate
+                }
+            }
+        }
+    }
+
+    function test_listViewTimePicker() {
+        var root = timePickerComponent.createObject(cleanupItem);
+        verify(root);
+
+        mouseDrag(root.minuteTumbler, root.minuteTumbler.width / 2, root.minuteTumbler.height / 2, 0, 50);
+        // Shouldn't crash.
+        mouseDrag(root.amPmTumbler, root.amPmTumbler.width / 2, root.amPmTumbler.height / 2, 0, 50);
     }
 
     function test_displacement_data() {
@@ -289,6 +361,9 @@ TestCase {
     }
 
     function test_displacement(data) {
+        tumbler = tumblerComponent.createObject(cleanupItem);
+        verify(tumbler);
+
         // TODO: test setting these in the opposite order (delegate after model
         // doesn't seem to cause a change in delegates in PathView)
         tumbler.delegate = displacementDelegate;
@@ -363,11 +438,10 @@ TestCase {
     }
 
     function test_displacementListView(data) {
-        tumbler.destroy();
         // Sanity check that they're aren't any children at this stage.
-        tryCompare(testCase.children, "length", 0);
+        tryCompare(cleanupItem.children, "length", 0);
 
-        tumbler = listViewTumblerComponent.createObject(testCase);
+        tumbler = listViewTumblerComponent.createObject(cleanupItem);
         verify(tumbler);
 
         tumbler.delegate = displacementDelegate;
@@ -405,6 +479,7 @@ TestCase {
             var dragDirection = distanceToReachContentY > 0 ? -1 : 1;
             for (var i = 0; i < distance && Math.floor(listView.contentY) !== Math.floor(data.contentY); ++i) {
                 mouseMove(tumbler, tumblerXCenter(), tumblerYCenter() + i * dragDirection);
+                wait(1); // because Flickable pays attention to velocity, we need some time between movements (qtdeclarative ebf07c3)
             }
         }
 
@@ -436,9 +511,7 @@ TestCase {
     }
 
     function test_listViewFlickAboveBounds(data) {
-        tumbler.destroy();
-
-        tumbler = listViewTumblerComponent.createObject(testCase);
+        tumbler = listViewTumblerComponent.createObject(cleanupItem);
         verify(tumbler);
 
         tumbler.delegate = displacementDelegate;
@@ -504,6 +577,9 @@ TestCase {
     }
 
     function test_visibleItemCount(data) {
+        tumbler = tumblerComponent.createObject(cleanupItem);
+        verify(tumbler);
+
         tumbler.delegate = objectNameDelegate;
         tumbler.visibleItemCount = data.visibleItemCount;
 
@@ -535,6 +611,9 @@ TestCase {
     }
 
     function test_attachedProperties() {
+        tumbler = tumblerComponent.createObject(cleanupItem);
+        verify(tumbler);
+
         // TODO: crashes somewhere in QML's guts
 //        tumbler.model = 5;
 //        tumbler.delegate = wrongDelegateTypeComponent;
@@ -546,14 +625,15 @@ TestCase {
         noParentDelegateComponent.createObject(null);
 
         ignoreWarning("Tumbler: attempting to access attached property on item without an \"index\" property");
-        var object = noParentDelegateComponent.createObject(testCase);
+        var object = noParentDelegateComponent.createObject(cleanupItem);
+        verify(object);
         object.destroy();
 
         // Should not be any warnings from this, as ListView, for example, doesn't produce warnings for the same code.
-        var gridView = gridViewComponent.createObject(testCase);
+        var gridView = gridViewComponent.createObject(cleanupItem);
         object = simpleDisplacementDelegate.createObject(gridView);
+        verify(object);
         object.destroy();
-        gridView.destroy();
     }
 
     property Component paddingDelegate: Text {
@@ -600,6 +680,9 @@ TestCase {
     }
 
     function test_padding(data) {
+        tumbler = tumblerComponent.createObject(cleanupItem);
+        verify(tumbler);
+
         tumbler.delegate = paddingDelegate;
         tumbler.model = 5;
         compare(tumbler.padding, 0);

@@ -102,6 +102,8 @@ QWaylandWindow::QWaylandWindow(QWindow *window)
 
 QWaylandWindow::~QWaylandWindow()
 {
+    mDisplay->handleWindowDestroyed(this);
+
     delete mWindowDecoration;
 
     if (isInitialized())
@@ -527,6 +529,11 @@ QWaylandSubSurface *QWaylandWindow::subSurfaceWindow() const
     return mSubSurfaceWindow;
 }
 
+bool QWaylandWindow::shellManagesActiveState() const
+{
+    return mShellSurface && mShellSurface->shellManagesActiveState();
+}
+
 void QWaylandWindow::handleContentOrientationChange(Qt::ScreenOrientation orientation)
 {
     if (mDisplay->compositorVersion() < 2)
@@ -845,6 +852,7 @@ bool QWaylandWindow::setWindowStateInternal(Qt::WindowState state)
     mState = state;
 
     if (mShellSurface) {
+        createDecoration();
         switch (state) {
             case Qt::WindowFullScreen:
                 mShellSurface->setFullscreen();

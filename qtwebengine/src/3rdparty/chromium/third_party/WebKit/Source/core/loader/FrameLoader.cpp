@@ -165,9 +165,9 @@ FrameLoader::FrameLoader(LocalFrame* frame)
     , m_inStopAllLoaders(false)
     , m_checkTimer(this, &FrameLoader::checkTimerFired)
     , m_didAccessInitialDocument(false)
-    , m_didAccessInitialDocumentTimer(this, &FrameLoader::didAccessInitialDocumentTimerFired)
     , m_forcedSandboxFlags(SandboxNone)
     , m_dispatchingDidClearWindowObjectInMainWorld(false)
+    , m_protectProvisionalLoader(false)
 {
 }
 
@@ -199,6 +199,11 @@ void FrameLoader::init()
     m_provisionalDocumentLoader->startLoadingMainResource();
     m_frame->document()->cancelParsing();
     m_stateMachine.advanceTo(FrameLoaderStateMachine::DisplayingInitialEmptyDocument);
+    // Self-suspend if created in an already deferred Page. Note that both
+    // startLoadingMainResource() and cancelParsing() may have already detached
+    // the frame, since they both fire JS events.
+    if (m_frame->page() && m_frame->page()->defersLoading())
+        setDefersLoading(true);
 }
 
 FrameLoaderClient* FrameLoader::client() const
@@ -253,6 +258,9 @@ void FrameLoader::saveScrollState()
 
 void FrameLoader::dispatchUnloadEvent()
 {
+    // If the frame is unloading, the provisional loader should no longer be
+    // protected. It will be detached soon.
+    m_protectProvisionalLoader = false;
     saveScrollState();
 
     if (m_frame->document() && !SVGImage::isInSVGImage(m_frame->document()))
@@ -684,6 +692,7 @@ void FrameLoader::detachDocumentLoader(RefPtrWillBeMember<DocumentLoader>& loade
     if (!loader)
         return;
 
+    FrameNavigationDisabler navigationDisabler(*m_frame);
     loader->detachFromFrame();
     loader = nullptr;
 }
@@ -994,13 +1003,16 @@ void FrameLoader::stopAllLoaders()
     }
 
     m_frame->document()->suppressLoadEvent();
-    if (m_provisionalDocumentLoader)
+    // Don't stop loading the provisional loader if it is being protected (i.e.
+    // it is about to be committed) See prepareForCommit() for more details.
+    if (m_provisionalDocumentLoader && !m_protectProvisionalLoader)
         m_provisionalDocumentLoader->stopLoading();
     if (m_documentLoader)
         m_documentLoader->stopLoading();
     m_frame->document()->cancelParsing();
 
-    detachDocumentLoader(m_provisionalDocumentLoader);
+    if (!m_protectProvisionalLoader)
+        detachDocumentLoader(m_provisionalDocumentLoader);
 
     m_checkTimer.stop();
     m_frame->navigationScheduler().cancel();
@@ -1013,22 +1025,12 @@ void FrameLoader::didAccessInitialDocument()
     // We only need to notify the client once, and only for the main frame.
     if (isLoadingMainFrame() && !m_didAccessInitialDocument) {
         m_didAccessInitialDocument = true;
-        // Notify asynchronously, since this is called within a JavaScript security check.
-        m_didAccessInitialDocumentTimer.startOneShot(0, BLINK_FROM_HERE);
-    }
-}
 
-void FrameLoader::didAccessInitialDocumentTimerFired(Timer<FrameLoader>*)
-{
-    if (client())
-        client()->didAccessInitialDocument();
-}
-
-void FrameLoader::notifyIfInitialDocumentAccessed()
-{
-    if (m_didAccessInitialDocumentTimer.isActive()) {
-        m_didAccessInitialDocumentTimer.stop();
-        didAccessInitialDocumentTimerFired(0);
+        // Forbid script execution to prevent re-entering V8, since this is
+        // called from a binding security check.
+        ScriptForbiddenScope forbidScripts;
+        if (client())
+            client()->didAccessInitialDocument();
     }
 }
 
@@ -1064,17 +1066,19 @@ bool FrameLoader::prepareForCommit()
     // we need to abandon the current load.
     if (pdl != m_provisionalDocumentLoader)
         return false;
+    // detachFromFrame() will abort XHRs that haven't completed, which can
+    // trigger event listeners for 'abort'. These event listeners might call
+    // window.stop(), which will in turn detach the provisional document loader.
+    // At this point, the provisional document loader should not detach, because
+    // then the FrameLoader would not have any attached DocumentLoaders.
     if (m_documentLoader) {
-        FrameNavigationDisabler navigationDisabler(*m_frame);
+        TemporaryChange<bool> inDetachDocumentLoader(m_protectProvisionalLoader, true);
         detachDocumentLoader(m_documentLoader);
     }
-    // detachFromFrame() will abort XHRs that haven't completed, which can
-    // trigger event listeners for 'abort'. These event listeners might detach
-    // the frame.
-    // TODO(dcheng): Investigate if this can be moved above the check that
-    // m_provisionalDocumentLoader hasn't changed.
+    // 'abort' listeners can also detach the frame.
     if (!m_frame->client())
         return false;
+    ASSERT(m_provisionalDocumentLoader == pdl);
     // No more events will be dispatched so detach the Document.
     // TODO(yoav): Should we also be nullifying domWindow's document (or domWindow) since the doc is now detached?
     if (m_frame->document())
@@ -1374,11 +1378,7 @@ void FrameLoader::startLoad(FrameLoadRequest& frameLoadRequest, FrameLoadType ty
         return;
 
     m_frame->document()->cancelParsing();
-
-    if (m_provisionalDocumentLoader) {
-        m_provisionalDocumentLoader->stopLoading();
-        detachDocumentLoader(m_provisionalDocumentLoader);
-    }
+    detachDocumentLoader(m_provisionalDocumentLoader);
 
     // beforeunload fired above, and detaching a DocumentLoader can fire
     // events, which can detach this frame.

@@ -169,6 +169,8 @@ private slots:
 
     void childAt();
 
+    void ignoreButtonPressNotInAcceptedMouseButtons();
+
 private:
 
     enum PaintOrderOp {
@@ -1769,56 +1771,56 @@ static void gc(QQmlEngine &engine)
 
 void tst_qquickitem::visualParentOwnership()
 {
-    QQuickView view;
-    view.setSource(testFileUrl("visualParentOwnership.qml"));
+    QQmlEngine engine;
+    QQmlComponent component(&engine, testFileUrl("visualParentOwnership.qml"));
 
-    QQuickItem *root = qobject_cast<QQuickItem*>(view.rootObject());
+    QScopedPointer<QQuickItem> root(qobject_cast<QQuickItem*>(component.create()));
     QVERIFY(root);
 
     QVariant newObject;
     {
-        QVERIFY(QMetaObject::invokeMethod(root, "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
+        QVERIFY(QMetaObject::invokeMethod(root.data(), "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
         QPointer<QQuickItem> newItem = qvariant_cast<QQuickItem*>(newObject);
         QVERIFY(!newItem.isNull());
 
         QVERIFY(!newItem->parent());
         QVERIFY(!newItem->parentItem());
 
-        newItem->setParentItem(root);
+        newItem->setParentItem(root.data());
 
-        gc(*view.engine());
+        gc(engine);
 
         QVERIFY(!newItem.isNull());
         newItem->setParentItem(0);
 
-        gc(*view.engine());
+        gc(engine);
         QVERIFY(newItem.isNull());
     }
     {
-        QVERIFY(QMetaObject::invokeMethod(root, "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
+        QVERIFY(QMetaObject::invokeMethod(root.data(), "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
         QPointer<QQuickItem> firstItem = qvariant_cast<QQuickItem*>(newObject);
         QVERIFY(!firstItem.isNull());
 
-        firstItem->setParentItem(root);
+        firstItem->setParentItem(root.data());
 
-        QVERIFY(QMetaObject::invokeMethod(root, "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
+        QVERIFY(QMetaObject::invokeMethod(root.data(), "createItemWithoutParent", Q_RETURN_ARG(QVariant, newObject)));
         QPointer<QQuickItem> secondItem = qvariant_cast<QQuickItem*>(newObject);
         QVERIFY(!firstItem.isNull());
 
         secondItem->setParentItem(firstItem);
 
-        gc(*view.engine());
+        gc(engine);
 
         delete firstItem;
 
         root->setProperty("keepAliveProperty", newObject);
 
-        gc(*view.engine());
+        gc(engine);
         QVERIFY(!secondItem.isNull());
 
         root->setProperty("keepAliveProperty", QVariant());
 
-        gc(*view.engine());
+        gc(engine);
         QVERIFY(secondItem.isNull());
     }
 }
@@ -2007,6 +2009,28 @@ void tst_qquickitem::childAt()
     QCOMPARE(found, 1);
 
     QVERIFY(!root->childAt(19,19));
+}
+
+void tst_qquickitem::ignoreButtonPressNotInAcceptedMouseButtons()
+{
+    // Verify the fix for QTBUG-31861
+    TestItem item;
+    QCOMPARE(item.acceptedMouseButtons(), Qt::MouseButtons(Qt::NoButton));
+
+    QQuickWindow window;
+    item.setSize(QSizeF(200,100));
+    item.setParentItem(window.contentItem());
+
+    item.setAcceptedMouseButtons(Qt::LeftButton);
+    QCOMPARE(item.acceptedMouseButtons(), Qt::MouseButtons(Qt::LeftButton));
+
+    QTest::mousePress(&window, Qt::LeftButton, 0, QPoint(50, 50));
+    QTest::mousePress(&window, Qt::RightButton, 0, QPoint(50, 50)); // ignored because it's not LeftButton
+    QTest::mouseRelease(&window, Qt::RightButton, 0, QPoint(50, 50)); // ignored because it didn't grab the RightButton press
+    QTest::mouseRelease(&window, Qt::LeftButton, 0, QPoint(50, 50));
+
+    QCOMPARE(item.pressCount, 1);
+    QCOMPARE(item.releaseCount, 1);
 }
 
 QTEST_MAIN(tst_qquickitem)

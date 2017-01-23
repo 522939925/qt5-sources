@@ -54,14 +54,18 @@ import QtQuick.Scene3D 2.0
 
 Window {
     visible: true
-    width: 800
-    height: 600
+    width: 1024
+    height: 768
+    color: "black"
 
-    Scene3D {
-        id: scene3D
+    Item {
         anchors.fill: parent
-        focus: true
-        aspects: "input"
-        Scene {}
+        Scene3D {
+            id: scene3D
+            anchors.fill: parent
+            focus: true
+            aspects: ["input", "logic"]
+            Scene {}
+        }
     }
 }

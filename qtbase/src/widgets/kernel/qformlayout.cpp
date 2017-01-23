@@ -65,12 +65,7 @@ public:
     T &operator()(int r, int c) { return m_storage[r * NumColumns + c]; }
 
     int rowCount() const { return m_storage.size() / NumColumns; }
-    void addRow(const T &value);
     void insertRow(int r, const T &value);
-    void removeRow(int r);
-
-    bool find(const T &value, int *rowPtr, int *colPtr) const ;
-    int count(const T &value) const { return m_storage.count(value);  }
 
     // Hmmpf.. Some things are faster that way.
     const Storage &storage() const { return m_storage; }
@@ -82,34 +77,11 @@ private:
 };
 
 template <class T, int NumColumns>
-void FixedColumnMatrix<T, NumColumns>::addRow(const T &value)
-{
-    for (int i = 0; i < NumColumns; ++i)
-        m_storage.append(value);
-}
-
-template <class T, int NumColumns>
 void FixedColumnMatrix<T, NumColumns>::insertRow(int r, const T &value)
 {
     typename Storage::iterator it = m_storage.begin();
     it += r * NumColumns;
     m_storage.insert(it, NumColumns, value);
-}
-
-template <class T, int NumColumns>
-void FixedColumnMatrix<T, NumColumns>::removeRow(int r)
-{
-    m_storage.remove(r * NumColumns, NumColumns);
-}
-
-template <class T, int NumColumns>
-bool FixedColumnMatrix<T, NumColumns>::find(const T &value, int *rowPtr, int *colPtr) const
-{
-    const int idx = m_storage.indexOf(value);
-    if (idx == -1)
-        return false;
-    storageIndexToPosition(idx, rowPtr, colPtr);
-    return true;
 }
 
 template <class T, int NumColumns>
@@ -1047,7 +1019,7 @@ QLayoutItem* QFormLayoutPrivate::replaceAt(int index, QLayoutItem *newitem)
     \li \b{Adherence to the different platform's look and feel guidelines.}
 
         For example, the
-        \l{http://developer.apple.com/library/mac/#documentation/UserExperience/Conceptual/AppleHIGuidelines/Intro/Intro.html}{Mac OS X Aqua} and KDE guidelines specify that the
+        \l{http://developer.apple.com/library/mac/#documentation/UserExperience/Conceptual/AppleHIGuidelines/Intro/Intro.html}{\macos Aqua} and KDE guidelines specify that the
         labels should be right-aligned, whereas Windows and GNOME
         applications normally use left-alignment.
 
@@ -1090,7 +1062,7 @@ QLayoutItem* QFormLayoutPrivate::replaceAt(int index, QLayoutItem *newitem)
            corresponds to what we would get using a two-column
            QGridLayout.)
         \li Style based on the
-           \l{http://developer.apple.com/library/mac/#documentation/UserExperience/Conceptual/AppleHIGuidelines/Intro/Intro.html}{Mac OS X Aqua} guidelines. Labels are right-aligned,
+           \l{http://developer.apple.com/library/mac/#documentation/UserExperience/Conceptual/AppleHIGuidelines/Intro/Intro.html}{\macos Aqua} guidelines. Labels are right-aligned,
            the fields don't grow beyond their size hint, and the
            form is horizontally centered.
         \li Recommended style for

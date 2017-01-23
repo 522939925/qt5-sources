@@ -61,7 +61,7 @@
 #include <Qt3DCore/qaspectengine.h>
 #include <Qt3DInput/QInputAspect>
 #include <Qt3DRender/QParameter>
-#include <Qt3DExtras//QCylinderMesh>
+#include <Qt3DExtras/QCylinderMesh>
 #include <Qt3DRender/QRenderAspect>
 #include <Qt3DRender/QCameraSelector>
 #include <Qt3DExtras/QPhongMaterial>
@@ -77,7 +77,7 @@ int main(int ac, char **av)
 {
     QGuiApplication app(ac, av);
     Qt3DExtras::Qt3DWindow view;
-    view.defaultFramegraph()->setClearColor(Qt::black);
+    view.defaultFrameGraph()->setClearColor(Qt::black);
 
     QEntity *root = new QEntity();
 

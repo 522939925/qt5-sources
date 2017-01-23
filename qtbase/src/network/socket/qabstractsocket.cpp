@@ -110,12 +110,12 @@
     To close the socket, call disconnectFromHost(). QAbstractSocket enters
     QAbstractSocket::ClosingState. After all pending data has been written to
     the socket, QAbstractSocket actually closes the socket, enters
-    QAbstractSocket::ClosedState, and emits disconnected(). If you want to
-    abort a connection immediately, discarding all pending data, call abort()
-    instead. If the remote host closes the connection, QAbstractSocket will
-    emit error(QAbstractSocket::RemoteHostClosedError), during which the socket
-    state will still be ConnectedState, and then the disconnected() signal
-    will be emitted.
+    QAbstractSocket::UnconnectedState, and emits disconnected(). If you want
+    to abort a connection immediately, discarding all pending data, call
+    abort() instead. If the remote host closes the connection,
+    QAbstractSocket will emit error(QAbstractSocket::RemoteHostClosedError),
+    during which the socket state will still be ConnectedState, and then the
+    disconnected() signal will be emitted.
 
     The port and address of the connected peer is fetched by calling
     peerPort() and peerAddress(). peerName() returns the host name of
@@ -427,7 +427,7 @@
     allowed to rebind, even if they pass ReuseAddressHint. This option
     provides more security than ShareAddress, but on certain operating
     systems, it requires you to run the server with administrator privileges.
-    On Unix and OS X, not sharing is the default behavior for binding
+    On Unix and \macos, not sharing is the default behavior for binding
     an address and port, so this option is ignored. On Windows, this
     option uses the SO_EXCLUSIVEADDRUSE socket option.
 
@@ -437,7 +437,7 @@
     socket option.
 
     \value DefaultForPlatform The default option for the current platform.
-    On Unix and OS X, this is equivalent to (DontShareAddress
+    On Unix and \macos, this is equivalent to (DontShareAddress
     + ReuseAddressHint), and on Windows, its equivalent to ShareAddress.
 */
 
@@ -687,10 +687,11 @@ bool QAbstractSocketPrivate::canReadNotification()
         socketEngine->setReadNotificationEnabled(false);
 
     // If buffered, read data from the socket into the read buffer
-    qint64 newBytes = 0;
     if (isBuffered) {
+        const qint64 oldBufferSize = buffer.size();
+
         // Return if there is no space in the buffer
-        if (readBufferMaxSize && buffer.size() >= readBufferMaxSize) {
+        if (readBufferMaxSize && oldBufferSize >= readBufferMaxSize) {
 #if defined (QABSTRACTSOCKET_DEBUG)
             qDebug("QAbstractSocketPrivate::canReadNotification() buffer is full");
 #endif
@@ -699,7 +700,6 @@ bool QAbstractSocketPrivate::canReadNotification()
 
         // If reading from the socket fails after getting a read
         // notification, close the socket.
-        newBytes = buffer.size();
         if (!readFromSocket()) {
 #if defined (QABSTRACTSOCKET_DEBUG)
             qDebug("QAbstractSocketPrivate::canReadNotification() disconnecting socket");
@@ -707,7 +707,13 @@ bool QAbstractSocketPrivate::canReadNotification()
             q->disconnectFromHost();
             return false;
         }
-        newBytes = buffer.size() - newBytes;
+
+        // Return if there is no new data available.
+        if (buffer.size() == oldBufferSize) {
+            // If the socket is opened only for writing, return true
+            // to indicate that the data was discarded.
+            return !q->isReadable();
+        }
 
         // If read buffer is full, disable the read socket notifier.
         if (readBufferMaxSize && buffer.size() == readBufferMaxSize) {
@@ -715,9 +721,7 @@ bool QAbstractSocketPrivate::canReadNotification()
         }
     }
 
-    // Only emit readyRead() if there is data available.
-    if (newBytes > 0 || !isBuffered)
-        emitReadyRead();
+    emitReadyRead();
 
     // If we were closed as a result of the readyRead() signal,
     // return.
@@ -2651,9 +2655,8 @@ void QAbstractSocket::setPeerName(const QString &name)
 }
 
 /*!
-    Closes the I/O device for the socket, disconnects the socket's connection with the
-    host, closes the socket, and resets the name, address, port number and underlying
-    socket descriptor.
+    Closes the I/O device for the socket and calls disconnectFromHost()
+    to close the socket's connection.
 
     See QIODevice::close() for a description of the actions that occur when an I/O
     device is closed.
@@ -2669,13 +2672,6 @@ void QAbstractSocket::close()
     QIODevice::close();
     if (d->state != UnconnectedState)
         disconnectFromHost();
-
-    d->localPort = 0;
-    d->peerPort = 0;
-    d->localAddress.clear();
-    d->peerAddress.clear();
-    d->peerName.clear();
-    d->cachedSocketDescriptor = -1;
 }
 
 /*!
@@ -2778,6 +2774,7 @@ void QAbstractSocket::disconnectFromHost()
     d->peerPort = 0;
     d->localAddress.clear();
     d->peerAddress.clear();
+    d->peerName.clear();
     d->setWriteChannelCount(0);
 
 #if defined(QABSTRACTSOCKET_DEBUG)

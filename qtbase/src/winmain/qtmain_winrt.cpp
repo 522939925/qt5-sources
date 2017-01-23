@@ -198,6 +198,14 @@ public:
 
 private:
     HRESULT activatedLaunch(IInspectable *activateArgs) {
+        // Check if an application instance is already running
+        // This is mostly needed for Windows Phone and file pickers
+        QAbstractEventDispatcher *dispatcher = QCoreApplication::eventDispatcher();
+        if (dispatcher) {
+            QCoreApplication::postEvent(dispatcher, new QActivationEvent(activateArgs));
+            return S_OK;
+        }
+
         QCoreApplication *app = QCoreApplication::instance();
 
         // Check whether the app already runs
@@ -307,7 +315,7 @@ private:
         if (develMode) {
             // Write a PID file to help runner
             const QString pidFileName = QDir(QStandardPaths::writableLocation(QStandardPaths::DataLocation))
-                    .absoluteFilePath(QString::number(uint(GetCurrentProcessId())) + QStringLiteral(".pid"));
+                    .absoluteFilePath(QString::asprintf("%u.pid", uint(GetCurrentProcessId())));
             CREATEFILE2_EXTENDED_PARAMETERS params = {
                 sizeof(CREATEFILE2_EXTENDED_PARAMETERS),
                 FILE_ATTRIBUTE_NORMAL

@@ -1,34 +1,37 @@
 /****************************************************************************
 **
 ** Copyright (C) 2016 The Qt Company Ltd and/or its subsidiary(-ies).
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -183,7 +186,6 @@ void QWasapiAudioOutput::setVolume(qreal vol)
         quint32 channelCount;
         HRESULT hr = m_volumeControl->GetChannelCount(&channelCount);
         for (quint32 i = 0; i < channelCount; ++i) {
-            // ### TODO: Use QAudioHelperInternal::qScaleVolumeFromLinear when integrated
             hr = m_volumeControl->SetChannelVolume(i, vol);
             RETURN_VOID_IF_FAILED("Could not set audio volume.");
         }
@@ -204,13 +206,9 @@ qreal QWasapiAudioOutput::volume() const
 void QWasapiAudioOutput::process()
 {
     qCDebug(lcMmAudioOutput) << __FUNCTION__;
-    const quint32 channelCount = m_currentFormat.channelCount();
-    const quint32 sampleBytes = m_currentFormat.sampleSize() / 8;
-    BYTE* buffer;
-    HRESULT hr;
     DWORD waitRet;
 
-    bool processing = true;
+    m_processing = true;
     do {
         waitRet = WaitForSingleObjectEx(m_event, 2000, FALSE);
         if (waitRet != WAIT_OBJECT_0) {
@@ -222,51 +220,59 @@ void QWasapiAudioOutput::process()
 
         if (m_currentState != QAudio::ActiveState && m_currentState != QAudio::IdleState)
             break;
+        QMetaObject::invokeMethod(this, "processBuffer", Qt::QueuedConnection);
+    } while (m_processing);
+}
 
-        quint32 paddingFrames;
-        hr = m_interface->m_client->GetCurrentPadding(&paddingFrames);
+void QWasapiAudioOutput::processBuffer()
+{
+    QMutexLocker locker(&m_mutex);
 
-        quint32 availableFrames = m_bufferFrames - paddingFrames;
-        hr = m_renderer->GetBuffer(availableFrames, &buffer);
-        if (hr != S_OK) {
-            m_currentError = QAudio::UnderrunError;
-            QMetaObject::invokeMethod(this, "errorChanged", Qt::QueuedConnection,
-                                      Q_ARG(QAudio::Error, QAudio::UnderrunError));
-            // Also Error Buffers need to be released
-            hr = m_renderer->ReleaseBuffer(availableFrames, 0);
-            ResetEvent(m_event);
-            continue; // We will continue trying
-        }
+    const quint32 channelCount = m_currentFormat.channelCount();
+    const quint32 sampleBytes = m_currentFormat.sampleSize() / 8;
+    BYTE* buffer;
+    HRESULT hr;
 
-        const quint32 readBytes = availableFrames * channelCount * sampleBytes;
-        qint64 read = m_eventDevice->read((char*)buffer, readBytes);
-        if (read < static_cast<qint64>(readBytes)) {
-            // Fill the rest of the buffer with zero to avoid audio glitches
-            if (m_currentError != QAudio::UnderrunError) {
-                m_currentError = QAudio::UnderrunError;
-                QMetaObject::invokeMethod(this, "errorChanged", Qt::QueuedConnection,
-                                          Q_ARG(QAudio::Error, QAudio::UnderrunError));
-            }
-            if (m_currentState != QAudio::IdleState) {
-                m_currentState = QAudio::IdleState;
-                QMetaObject::invokeMethod(this, "stateChanged", Qt::QueuedConnection,
-                                          Q_ARG(QAudio::State, QAudio::IdleState));
-            }
-        }
+    quint32 paddingFrames;
+    hr = m_interface->m_client->GetCurrentPadding(&paddingFrames);
 
+    const quint32 availableFrames = m_bufferFrames - paddingFrames;
+    hr = m_renderer->GetBuffer(availableFrames, &buffer);
+    if (hr != S_OK) {
+        m_currentError = QAudio::UnderrunError;
+        emit errorChanged(m_currentError);
+        // Also Error Buffers need to be released
         hr = m_renderer->ReleaseBuffer(availableFrames, 0);
-        if (hr != S_OK)
-            qFatal("Could not release buffer");
         ResetEvent(m_event);
+        return;
+    }
 
-        if (m_interval && m_openTime.elapsed() - m_openTimeOffset > m_interval) {
-            QMetaObject::invokeMethod(this, "notify", Qt::QueuedConnection);
-            m_openTimeOffset = m_openTime.elapsed();
+    const quint32 readBytes = availableFrames * channelCount * sampleBytes;
+    const qint64 read = m_eventDevice->read((char*)buffer, readBytes);
+    if (read < static_cast<qint64>(readBytes)) {
+        // Fill the rest of the buffer with zero to avoid audio glitches
+        if (m_currentError != QAudio::UnderrunError) {
+            m_currentError = QAudio::UnderrunError;
+            emit errorChanged(m_currentError);
         }
+        if (m_currentState != QAudio::IdleState) {
+            m_currentState = QAudio::IdleState;
+            emit stateChanged(m_currentState);
+        }
+    }
 
-        m_bytesProcessed += read;
-        processing = m_currentState == QAudio::ActiveState || m_currentState == QAudio::IdleState;
-    } while (processing);
+    hr = m_renderer->ReleaseBuffer(availableFrames, 0);
+    if (hr != S_OK)
+        qFatal("Could not release buffer");
+    ResetEvent(m_event);
+
+    if (m_interval && m_openTime.elapsed() - m_openTimeOffset > m_interval) {
+        emit notify();
+        m_openTimeOffset = m_openTime.elapsed();
+    }
+
+    m_bytesProcessed += read;
+    m_processing = m_currentState == QAudio::ActiveState || m_currentState == QAudio::IdleState;
 }
 
 bool QWasapiAudioOutput::initStart(bool pull)

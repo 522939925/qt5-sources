@@ -281,7 +281,10 @@ QWidgetPrivate::QWidgetPrivate(int version)
 #endif
 #ifndef QT_NO_OPENGL
       , renderToTextureReallyDirty(1)
+      , renderToTextureComposeActive(0)
 #endif
+      , childrenHiddenByWState(0)
+      , childrenShownByExpose(0)
 #if defined(Q_OS_WIN)
       , noPaintOnScreen(0)
 #endif
@@ -564,7 +567,7 @@ void QWidget::setAutoFillBackground(bool enabled)
 
     Composite widgets can also be created by subclassing a standard widget,
     such as QWidget or QFrame, and adding the necessary layout and child
-    widgets in the constructor of the subclass. Many of the \l{Qt Examples}
+    widgets in the constructor of the subclass. Many of the \l{Qt Widgets Examples}
     {examples provided with Qt} use this approach, and it is also covered in
     the Qt \l{Tutorials}.
 
@@ -1435,6 +1438,7 @@ void QWidgetPrivate::create_sys(WId window, bool initializeWindow, bool destroyO
         win->setProperty("_q_showWithoutActivating", QVariant(true));
     if (q->testAttribute(Qt::WA_MacAlwaysShowToolWindow))
         win->setProperty("_q_macAlwaysShowToolWindow", QVariant::fromValue(QVariant(true)));
+    setNetWmWindowTypes(true); // do nothing if none of WA_X11NetWmWindowType* is set
     win->setFlags(data.window_flags);
     fixPosIncludesFrame();
     if (q->testAttribute(Qt::WA_Moved)
@@ -1479,6 +1483,9 @@ void QWidgetPrivate::create_sys(WId window, bool initializeWindow, bool destroyO
         win->handle()->setFrameStrutEventsEnabled(true);
 
     data.window_flags = win->flags();
+
+    if (!topData()->role.isNull())
+        QXcbWindowFunctions::setWmWindowRole(win, topData()->role.toLatin1());
 
     QBackingStore *store = q->backingStore();
 
@@ -2520,7 +2527,7 @@ QWidget *QWidget::find(WId id)
     If a widget is non-native (alien) and winId() is invoked on it, that widget
     will be provided a native handle.
 
-    On OS X, the type returned depends on which framework Qt was linked
+    On \macos, the type returned depends on which framework Qt was linked
     against. If Qt is using Carbon, the {WId} is actually an HIViewRef. If Qt
     is using Cocoa, {WId} is a pointer to an NSView.
 
@@ -2647,7 +2654,7 @@ QWindow *QWidget::windowHandle() const
     The style sheet contains a textual description of customizations to the
     widget's style, as described in the \l{Qt Style Sheets} document.
 
-    Since Qt 4.5, Qt style sheets fully supports OS X.
+    Since Qt 4.5, Qt style sheets fully supports \macos.
 
     \warning Qt style sheets are currently not supported for custom QStyle
     subclasses. We plan to address this in some future release.
@@ -5140,7 +5147,7 @@ void QWidget::render(QPaintDevice *target, const QPoint &targetOffset,
     Transformations and settings applied to the \a painter will be used
     when rendering.
 
-    \note The \a painter must be active. On OS X the widget will be
+    \note The \a painter must be active. On \macos the widget will be
     rendered into a QPixmap and then drawn by the \a painter.
 
     \sa QPainter::device()
@@ -5224,8 +5231,10 @@ static void sendResizeEvents(QWidget *target)
 
     const QObjectList children = target->children();
     for (int i = 0; i < children.size(); ++i) {
+        if (!children.at(i)->isWidgetType())
+            continue;
         QWidget *child = static_cast<QWidget*>(children.at(i));
-        if (child->isWidgetType() && !child->isWindow() && child->testAttribute(Qt::WA_PendingResizeEvent))
+        if (!child->isWindow() && child->testAttribute(Qt::WA_PendingResizeEvent))
             sendResizeEvents(child);
     }
 }
@@ -6284,7 +6293,7 @@ QString QWidget::windowIconText() const
     If the window title is set at any point, then the window title takes precedence and
     will be shown instead of the file path string.
 
-    Additionally, on OS X, this has an added benefit that it sets the
+    Additionally, on \macos, this has an added benefit that it sets the
     \l{http://developer.apple.com/documentation/UserExperience/Conceptual/OSXHIGuidelines/XHIGWindows/chapter_17_section_3.html}{proxy icon}
     for the window, assuming that the file path exists.
 
@@ -6357,13 +6366,11 @@ QString QWidget::windowRole() const
 */
 void QWidget::setWindowRole(const QString &role)
 {
-#if defined(Q_DEAD_CODE_FROM_QT4_X11)
     Q_D(QWidget);
+    d->createTLExtra();
     d->topData()->role = role;
-    d->setWindowRole();
-#else
-    Q_UNUSED(role)
-#endif
+    if (windowHandle())
+        QXcbWindowFunctions::setWmWindowRole(windowHandle(), role.toLatin1());
 }
 
 /*!
@@ -9032,13 +9039,23 @@ bool QWidget::event(QEvent *event)
     case QEvent::WindowStateChange: {
         const bool wasMinimized = static_cast<const QWindowStateChangeEvent *>(event)->oldState() & Qt::WindowMinimized;
         if (wasMinimized != isMinimized()) {
+            QWidget *widget = const_cast<QWidget *>(this);
             if (wasMinimized) {
-                QShowEvent showEvent;
-                QCoreApplication::sendEvent(const_cast<QWidget *>(this), &showEvent);
+                // Always send the spontaneous events here, otherwise it can break the application!
+                if (!d->childrenShownByExpose) {
+                    // Show widgets only when they are not yet shown by the expose event
+                    d->showChildren(true);
+                    QShowEvent showEvent;
+                    QCoreApplication::sendSpontaneousEvent(widget, &showEvent);
+                }
+                d->childrenHiddenByWState = false; // Set it always to "false" when window is restored
             } else {
                 QHideEvent hideEvent;
-                QCoreApplication::sendEvent(const_cast<QWidget *>(this), &hideEvent);
+                QCoreApplication::sendSpontaneousEvent(widget, &hideEvent);
+                d->hideChildren(true);
+                d->childrenHiddenByWState = true;
             }
+            d->childrenShownByExpose = false; // Set it always to "false" when window state changes
         }
         changeEvent(event);
     }
@@ -10369,14 +10386,13 @@ void QWidgetPrivate::setWindowFlags(Qt::WindowFlags flags)
         // the old type was a window and/or the new type is a window
         QPoint oldPos = q->pos();
         bool visible = q->isVisible();
+        const bool windowFlagChanged = (q->data->window_flags ^ flags) & Qt::Window;
         q->setParent(q->parentWidget(), flags);
 
         // if both types are windows or neither of them are, we restore
         // the old position
-        if (!((q->data->window_flags ^ flags) & Qt::Window)
-            && (visible || q->testAttribute(Qt::WA_Moved))) {
+        if (!windowFlagChanged && (visible || q->testAttribute(Qt::WA_Moved)))
             q->move(oldPos);
-        }
         // for backward-compatibility we change Qt::WA_QuitOnClose attribute value only when the window was recreated.
         adjustQuitOnCloseAttribute();
     } else {
@@ -11259,7 +11275,6 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
         break;
     }
 
-#ifdef Q_DEAD_CODE_FROM_QT4_X11
     case Qt::WA_X11NetWmWindowTypeDesktop:
     case Qt::WA_X11NetWmWindowTypeDock:
     case Qt::WA_X11NetWmWindowTypeToolBar:
@@ -11273,10 +11288,8 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
     case Qt::WA_X11NetWmWindowTypeNotification:
     case Qt::WA_X11NetWmWindowTypeCombo:
     case Qt::WA_X11NetWmWindowTypeDND:
-        if (testAttribute(Qt::WA_WState_Created))
-            d->setNetWmWindowTypes();
+        d->setNetWmWindowTypes();
         break;
-#endif
 
     case Qt::WA_StaticContents:
         if (QWidgetBackingStore *bs = d->maybeBackingStore()) {
@@ -11329,12 +11342,10 @@ bool QWidget::testAttribute_helper(Qt::WidgetAttribute attribute) const
 
   By default the value of this property is 1.0.
 
-  This feature is available on Embedded Linux, OS X, Windows,
+  This feature is available on Embedded Linux, \macos, Windows,
   and X11 platforms that support the Composite extension.
 
-  This feature is not available on Windows CE.
-
-  Note that under X11 you need to have a composite manager running,
+  \note On X11 you need to have a composite manager running,
   and the X11 specific _NET_WM_WINDOW_OPACITY atom needs to be
   supported by the window manager you are using.
 
@@ -11392,7 +11403,7 @@ void QWidgetPrivate::setWindowOpacity_sys(qreal level)
 
     A modified window is a window whose content has changed but has
     not been saved to disk. This flag will have different effects
-    varied by the platform. On OS X the close button will have a
+    varied by the platform. On \macos the close button will have a
     modified look; on other platforms, the window title will have an
     '*' (asterisk).
 
@@ -12541,7 +12552,7 @@ static void releaseMouseGrabOfWidget(QWidget *widget)
 
     \note On Windows, grabMouse() only works when the mouse is inside a window
     owned by the process.
-    On OS X, grabMouse() only works when the mouse is inside the frame of that widget.
+    On \macos, grabMouse() only works when the mouse is inside the frame of that widget.
 
     \sa releaseMouse(), grabKeyboard(), releaseKeyboard()
 */
@@ -12947,6 +12958,47 @@ void QWidgetPrivate::setWidgetParentHelper(QObject *widgetAsObject, QObject *new
     widget->setParent(static_cast<QWidget*>(newParent));
 }
 
+void QWidgetPrivate::setNetWmWindowTypes(bool skipIfMissing)
+{
+    Q_Q(QWidget);
+
+    if (!q->windowHandle())
+        return;
+
+    int wmWindowType = 0;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeDesktop))
+        wmWindowType |= QXcbWindowFunctions::Desktop;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeDock))
+        wmWindowType |= QXcbWindowFunctions::Dock;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeToolBar))
+        wmWindowType |= QXcbWindowFunctions::Toolbar;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeMenu))
+        wmWindowType |= QXcbWindowFunctions::Menu;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeUtility))
+        wmWindowType |= QXcbWindowFunctions::Utility;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeSplash))
+        wmWindowType |= QXcbWindowFunctions::Splash;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeDialog))
+        wmWindowType |= QXcbWindowFunctions::Dialog;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeDropDownMenu))
+        wmWindowType |= QXcbWindowFunctions::DropDownMenu;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypePopupMenu))
+        wmWindowType |= QXcbWindowFunctions::PopupMenu;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeToolTip))
+        wmWindowType |= QXcbWindowFunctions::Tooltip;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeNotification))
+        wmWindowType |= QXcbWindowFunctions::Notification;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeCombo))
+        wmWindowType |= QXcbWindowFunctions::Combo;
+    if (q->testAttribute(Qt::WA_X11NetWmWindowTypeDND))
+        wmWindowType |= QXcbWindowFunctions::Dnd;
+
+    if (wmWindowType == 0 && skipIfMissing)
+        return;
+
+    QXcbWindowFunctions::setWmWindowType(q->windowHandle(), static_cast<QXcbWindowFunctions::WmWindowType>(wmWindowType));
+}
+
 #ifndef QT_NO_DEBUG_STREAM
 
 static inline void formatWidgetAttributes(QDebug debug, const QWidget *widget)
@@ -13013,7 +13065,7 @@ QDebug operator<<(QDebug debug, const QWidget *widget)
     This function will return 0 if no painter context can be established, or if the handle
     could not be created.
 
-    \warning This function is only available on OS X.
+    \warning This function is only available on \macos.
 */
 /*! \fn Qt::HANDLE QWidget::macQDHandle() const
     \internal
@@ -13022,7 +13074,7 @@ QDebug operator<<(QDebug debug, const QWidget *widget)
     This function will return 0 if QuickDraw is not supported, or if the handle could
     not be created.
 
-    \warning This function is only available on OS X.
+    \warning This function is only available on \macos.
 */
 /*! \fn const QX11Info &QWidget::x11Info() const
     \internal

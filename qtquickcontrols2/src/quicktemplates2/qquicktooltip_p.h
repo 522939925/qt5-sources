@@ -75,11 +75,9 @@ public:
     int timeout() const;
     void setTimeout(int timeout);
 
-    static QQuickToolTipAttached *qmlAttachedProperties(QObject *object);
+    void setVisible(bool visible) override;
 
-public Q_SLOTS:
-    void open();
-    void close();
+    static QQuickToolTipAttached *qmlAttachedProperties(QObject *object);
 
 Q_SIGNALS:
     void textChanged();
@@ -111,7 +109,7 @@ class Q_QUICKTEMPLATES2_PRIVATE_EXPORT QQuickToolTipAttached : public QObject
     Q_PROPERTY(QQuickToolTip *toolTip READ toolTip CONSTANT FINAL)
 
 public:
-    explicit QQuickToolTipAttached(QQuickItem *item);
+    explicit QQuickToolTipAttached(QObject *parent);
 
     QString text() const;
     void setText(const QString &text);

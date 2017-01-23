@@ -55,11 +55,13 @@ QT_BEGIN_NAMESPACE
 
     \section2 Using Containers
 
-    Container provides API to \l {addItem}{add}, \l {insertItem}{insert},
+    Typically, items are statically declared as children of Container, but it
+    is also possible to \l {addItem}{add}, \l {insertItem}{insert},
     \l {moveItem}{move} and \l {removeItem}{remove} items dynamically. The
-    items in a container can be accessed using \l itemAt() or \l contentChildren.
+    items in a container can be accessed using \l itemAt() or
+    \l contentChildren.
 
-    Most containers have a concept of a "current" item. The current item is
+    Most containers have the concept of a "current" item. The current item is
     specified via the \l currentIndex property, and can be accessed using the
     read-only \l currentItem property.
 
@@ -142,7 +144,8 @@ static QQuickItem *effectiveContentItem(QQuickItem *item)
     return item;
 }
 
-QQuickContainerPrivate::QQuickContainerPrivate() : contentModel(nullptr), currentIndex(-1), updatingCurrent(false)
+QQuickContainerPrivate::QQuickContainerPrivate() : contentModel(nullptr), currentIndex(-1), updatingCurrent(false),
+    changeTypes(Destroyed | Parent | SiblingOrder)
 {
 }
 
@@ -162,7 +165,7 @@ void QQuickContainerPrivate::cleanup()
     for (int i = 0; i < count; ++i) {
         QQuickItem *item = itemAt(i);
         if (item)
-            QQuickItemPrivate::get(item)->removeItemChangeListener(this, QQuickItemPrivate::Destroyed | QQuickItemPrivate::Parent | QQuickItemPrivate::SiblingOrder);
+            QQuickItemPrivate::get(item)->removeItemChangeListener(this, changeTypes);
     }
 
     if (contentItem) {
@@ -194,7 +197,7 @@ void QQuickContainerPrivate::insertItem(int index, QQuickItem *item)
     updatingCurrent = true;
 
     item->setParentItem(effectiveContentItem(contentItem));
-    QQuickItemPrivate::get(item)->addItemChangeListener(this, QQuickItemPrivate::Destroyed | QQuickItemPrivate::Parent | QQuickItemPrivate::SiblingOrder);
+    QQuickItemPrivate::get(item)->addItemChangeListener(this, changeTypes);
     contentModel->insert(index, item);
 
     q->itemAdded(index, item);
@@ -240,7 +243,7 @@ void QQuickContainerPrivate::removeItem(int index, QQuickItem *item)
         currentChanged = true;
     }
 
-    QQuickItemPrivate::get(item)->removeItemChangeListener(this, QQuickItemPrivate::Destroyed | QQuickItemPrivate::Parent | QQuickItemPrivate::SiblingOrder);
+    QQuickItemPrivate::get(item)->removeItemChangeListener(this, changeTypes);
     item->setParentItem(nullptr);
     contentModel->remove(index);
 

@@ -91,27 +91,27 @@ void setRenderViewConfigFromFrameGraphLeafNode(RenderView *rv, const FrameGraphN
         FrameGraphNode::FrameGraphNodeType type = node->nodeType();
         if (node->isEnabled())
             switch (type) {
+            case FrameGraphNode::InvalidNodeType:
+                // A base FrameGraphNode, can be used for grouping purposes
+                break;
             case FrameGraphNode::CameraSelector:
                 // Can be set only once and we take camera nearest to the leaf node
-                if (!rv->renderCamera()) {
+                if (!rv->renderCameraLens()) {
                     const CameraSelector *cameraSelector = static_cast<const CameraSelector *>(node);
                     Entity *camNode = manager->renderNodesManager()->lookupResource(cameraSelector->cameraUuid());
                     if (camNode) {
                         CameraLens *lens = camNode->renderComponent<CameraLens>();
+                        rv->setRenderCameraEntity(camNode);
                         if (lens && lens->isEnabled()) {
-                            rv->setRenderCamera(lens);
-                            rv->setViewMatrix(*camNode->worldTransform());
-                            rv->setViewProjectionMatrix(lens->projection() * *camNode->worldTransform());
-
-                            //To get the eyePosition of the camera, we need to use the inverse of the
-                            //camera's worldTransform matrix.
-                            const QMatrix4x4 inverseWorldTransform = camNode->worldTransform()->inverted();
-                            const QVector3D eyePosition(inverseWorldTransform.column(3));
-                            rv->setEyePosition(eyePosition);
+                            rv->setRenderCameraLens(lens);
+                            // ViewMatrix and ProjectionMatrix are computed
+                            // later in updateMatrices()
+                            // since at this point the transformation matrices
+                            // may not yet have been updated
                         }
                     }
-                    break;
                 }
+                break;
 
             case FrameGraphNode::LayerFilter: // Can be set multiple times in the tree
                 rv->setHasLayerFilter(true);
@@ -132,8 +132,8 @@ void setRenderViewConfigFromFrameGraphLeafNode(RenderView *rv, const FrameGraphN
                 HTarget renderTargetHandle = manager->renderTargetManager()->lookupHandle(renderTargetUid);
 
                 // Add renderTarget Handle and build renderCommand AttachmentPack
-                if (rv->renderTargetHandle().isNull()) {
-                    rv->setRenderTargetHandle(renderTargetHandle);
+                if (!rv->renderTargetId()) {
+                    rv->setRenderTargetId(renderTargetUid);
 
                     RenderTarget *renderTarget = manager->renderTargetManager()->data(renderTargetHandle);
                     if (renderTarget)
@@ -143,7 +143,7 @@ void setRenderViewConfigFromFrameGraphLeafNode(RenderView *rv, const FrameGraphN
             }
 
             case FrameGraphNode::ClearBuffers: {
-                const ClearBuffers* cbNode = static_cast<const ClearBuffers *>(node);
+                const ClearBuffers *cbNode = static_cast<const ClearBuffers *>(node);
                 rv->addClearBuffers(cbNode);
                 break;
             }
@@ -179,12 +179,13 @@ void setRenderViewConfigFromFrameGraphLeafNode(RenderView *rv, const FrameGraphN
                 const Render::StateSetNode *rStateSet = static_cast<const Render::StateSetNode *>(node);
                 // Create global RenderStateSet for renderView if no stateSet was set before
                 RenderStateSet *stateSet = rv->stateSet();
-                if (stateSet == nullptr) {
-                    stateSet = rv->allocator()->allocate<RenderStateSet>();
+                if (stateSet == nullptr && rStateSet->hasRenderStates()) {
+                    stateSet = new RenderStateSet();
                     rv->setStateSet(stateSet);
                 }
 
-                addToRenderStateSet(stateSet, rStateSet, manager->renderStateManager());
+                if (rStateSet->hasRenderStates())
+                    addToRenderStateSet(stateSet, rStateSet->renderStates(), manager->renderStateManager());
                 break;
             }
 
@@ -238,13 +239,14 @@ void setRenderViewConfigFromFrameGraphLeafNode(RenderView *rv, const FrameGraphN
     \a effect specified by the \a renderView.
 */
 Technique *findTechniqueForEffect(Renderer *renderer,
-                                  RenderView *renderView,
+                                  const TechniqueFilter *techniqueFilter,
                                   Effect *effect)
 {
     if (!effect)
         return nullptr;
 
     NodeManagers *manager = renderer->nodeManagers();
+    QVector<Technique*> matchingTechniques;
 
     // Iterate through the techniques in the effect
     const auto techniqueIds = effect->techniques();
@@ -258,10 +260,11 @@ Technique *findTechniqueForEffect(Renderer *renderer,
         if (renderer->isRunning() && *renderer->contextInfo() == *technique->graphicsApiFilter()) {
 
             // If no techniqueFilter is present, we return the technique as it satisfies OpenGL version
-            const TechniqueFilter *techniqueFilter = renderView->techniqueFilter();
             bool foundMatch = (techniqueFilter == nullptr || techniqueFilter->filters().isEmpty());
-            if (foundMatch)
-                return technique;
+            if (foundMatch) {
+                matchingTechniques.append(technique);
+                continue;
+            }
 
             // There is a technique filter so we need to check for a technique with suitable criteria.
             // Check for early bail out if the technique doesn't have sufficient number of criteria and
@@ -290,30 +293,45 @@ Technique *findTechniqueForEffect(Renderer *renderer,
                 }
             }
 
-            if (foundMatch)
-                return technique; // All criteria matched - we have a winner!
+            if (foundMatch) {
+                // All criteria matched - we have a winner!
+                matchingTechniques.append(technique);
+            }
         }
     }
 
-    // We failed to find a suitable technique to use :(
-    return nullptr;
+    if (matchingTechniques.size() == 0) // We failed to find a suitable technique to use :(
+        return nullptr;
+
+    if (matchingTechniques.size() == 1)
+        return matchingTechniques[0];
+
+    // Several compatible techniques, return technique with highest major and minor version
+    Technique* highest = matchingTechniques[0];
+    GraphicsApiFilterData filter = *highest->graphicsApiFilter();
+    for (auto it = matchingTechniques.cbegin() + 1; it < matchingTechniques.cend(); ++it) {
+        if (filter < *(*it)->graphicsApiFilter()) {
+            filter = *(*it)->graphicsApiFilter();
+            highest = *it;
+        }
+    }
+    return highest;
 }
 
 
-RenderRenderPassList findRenderPassesForTechnique(NodeManagers *manager,
-                                                  RenderView *renderView,
-                                                  Technique *technique)
+RenderPassList findRenderPassesForTechnique(NodeManagers *manager,
+                                            const RenderPassFilter *passFilter,
+                                            Technique *technique)
 {
     Q_ASSERT(manager);
     Q_ASSERT(technique);
 
-    RenderRenderPassList passes;
+    RenderPassList passes;
     const auto passIds = technique->renderPasses();
     for (const QNodeId passId : passIds) {
         RenderPass *renderPass = manager->renderPassManager()->lookupResource(passId);
 
         if (renderPass && renderPass->isEnabled()) {
-            const RenderPassFilter *passFilter = renderView->renderPassFilter();
             bool foundMatch = (!passFilter || passFilter->filters().size() == 0);
 
             // A pass filter is present so we need to check for matching criteria
@@ -360,12 +378,10 @@ ParameterInfoList::const_iterator findParamInfo(ParameterInfoList *params, const
 }
 
 void addParametersForIds(ParameterInfoList *params, ParameterManager *manager,
-                         const QVector<Qt3DCore::QNodeId> &parameterIds)
+                         const Qt3DCore::QNodeIdVector &parameterIds)
 {
     for (const QNodeId paramId : parameterIds) {
         Parameter *param = manager->lookupResource(paramId);
-        if (Q_UNLIKELY(!param))
-            continue;
         ParameterInfoList::iterator it = std::lower_bound(params->begin(), params->end(), param->nameId());
         if (it == params->end() || it->nameId != param->nameId())
             params->insert(it, ParameterInfo(param->nameId(), param->value()));
@@ -392,12 +408,11 @@ void parametersFromMaterialEffectTechnique(ParameterInfoList *infoList,
 }
 
 void addToRenderStateSet(RenderStateSet *stateSet,
-                         const RenderStateCollection *collection,
+                         const QVector<Qt3DCore::QNodeId> stateIds,
                          RenderStateManager *manager)
 {
-    const auto rstates = collection->renderStates(manager);
-    for (RenderStateNode *rstate : rstates)
-        stateSet->addState(rstate->impl());
+    for (const Qt3DCore::QNodeId &stateId : stateIds)
+        stateSet->addState(manager->lookupResource(stateId)->impl());
 }
 
 namespace {
@@ -416,7 +431,7 @@ UniformBlockValueBuilder::~UniformBlockValueBuilder()
 {
 }
 
-void UniformBlockValueBuilder::buildActiveUniformNameValueMapHelper(const QString &blockName, const QString &qmlPropertyName, const QVariant &value)
+void UniformBlockValueBuilder::buildActiveUniformNameValueMapHelper(ShaderData *currentShaderData, const QString &blockName, const QString &qmlPropertyName, const QVariant &value)
 {
     // In the end, values are either scalar or a scalar array
     // Composed elements (structs, structs array) are simplified into simple scalars
@@ -449,24 +464,48 @@ void UniformBlockValueBuilder::buildActiveUniformNameValueMapHelper(const QStrin
         QString varName = blockName + QLatin1Char('.') + qmlPropertyName;
         if (uniforms.contains(varName)) {
             qCDebug(Shaders) << "UBO scalar member " << varName << " set for update";
-            activeUniformNamesToValue.insert(StringToInt::lookupId(varName), value);
+
+            // If the property needs to be transformed, we transform it here as
+            // the shaderdata cannot hold transformed properties for multiple
+            // thread contexts at once
+            if (currentShaderData->propertyTransformType(qmlPropertyName) != ShaderData::NoTransform)
+                activeUniformNamesToValue.insert(StringToInt::lookupId(varName),
+                                                 currentShaderData->getTransformedProperty(qmlPropertyName, viewMatrix));
+            else
+                activeUniformNamesToValue.insert(StringToInt::lookupId(varName), value);
         }
     }
 }
 
 void UniformBlockValueBuilder::buildActiveUniformNameValueMapStructHelper(ShaderData *rShaderData, const QString &blockName, const QString &qmlPropertyName)
 {
-    const QHash<QString, QVariant> &properties = updatedPropertiesOnly ? rShaderData->updatedProperties() : rShaderData->properties();
+    const QHash<QString, QVariant> &properties = rShaderData->properties();
     QHash<QString, QVariant>::const_iterator it = properties.begin();
     const QHash<QString, QVariant>::const_iterator end = properties.end();
 
     while (it != end) {
         const auto prefix = qmlPropertyName.isEmpty() ? QLatin1String("") : QLatin1String(".");
-        buildActiveUniformNameValueMapHelper(blockName + prefix + qmlPropertyName,
+        buildActiveUniformNameValueMapHelper(rShaderData,
+                                             blockName + prefix + qmlPropertyName,
                                              it.key(),
                                              it.value());
         ++it;
     }
+}
+
+ParameterInfo::ParameterInfo(const int nameId, const QVariant &value)
+    : nameId(nameId)
+    , value(value)
+{}
+
+bool ParameterInfo::operator<(const ParameterInfo &other) const Q_DECL_NOEXCEPT
+{
+    return nameId < other.nameId;
+}
+
+bool ParameterInfo::operator<(const int otherNameId) const Q_DECL_NOEXCEPT
+{
+    return nameId < otherNameId;
 }
 
 } // namespace Render
