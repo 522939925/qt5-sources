@@ -401,10 +401,11 @@ void QWebEnginePagePrivate::unhandledKeyEvent(QKeyEvent *event)
         QGuiApplication::sendEvent(view->parentWidget(), event);
 }
 
-void QWebEnginePagePrivate::adoptNewWindow(QSharedPointer<WebContentsAdapter> newWebContents, WindowOpenDisposition disposition, bool userGesture, const QRect &initialGeometry)
+void QWebEnginePagePrivate::adoptNewWindow(QSharedPointer<WebContentsAdapter> newWebContents, WindowOpenDisposition disposition, bool userGesture, const QRect &initialGeometry, const QUrl &targetUrl)
 {
     Q_Q(QWebEnginePage);
     Q_UNUSED(userGesture);
+    Q_UNUSED(targetUrl);
 
     QWebEnginePage *newPage = q->createWindow(toWindowType(disposition));
     if (!newPage)
@@ -583,12 +584,10 @@ void QWebEnginePagePrivate::runMouseLockPermissionRequest(const QUrl &securityOr
     Q_EMIT q->featurePermissionRequested(securityOrigin, QWebEnginePage::MouseLock);
 }
 
-#ifndef QT_NO_ACCESSIBILITY
 QObject *QWebEnginePagePrivate::accessibilityParentObject()
 {
     return view;
 }
-#endif // QT_NO_ACCESSIBILITY
 
 void QWebEnginePagePrivate::updateAction(QWebEnginePage::WebAction action) const
 {
@@ -1581,7 +1580,7 @@ QMenu *QWebEnginePage::createStandardContextMenu()
         menu->addSeparator();
     }
 
-    if (!contextMenuData.linkText().isEmpty() && contextMenuData.linkUrl().isValid()) {
+    if (contextMenuData.linkUrl().isValid()) {
         action = QWebEnginePage::action(OpenLinkInThisWindow);
         action->setText(tr("Follow Link"));
         menu->addAction(action);
@@ -1895,7 +1894,7 @@ QStringList QWebEnginePage::chooseFiles(FileSelectionMode mode, const QStringLis
         break;
     // Chromium extension, not exposed as part of the public API for now.
     case FilePickerController::UploadFolder:
-        str = QFileDialog::getExistingDirectory(view(), tr("Select folder to upload")) + QLatin1Char('/');
+        str = QFileDialog::getExistingDirectory(view(), tr("Select folder to upload"));
         if (!str.isNull())
             ret << str;
         break;

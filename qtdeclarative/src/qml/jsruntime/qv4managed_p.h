@@ -52,6 +52,7 @@
 
 #include "qv4global_p.h"
 #include "qv4value_p.h"
+#include "qv4enginebase_p.h"
 #include <private/qv4heap_p.h>
 
 QT_BEGIN_NAMESPACE
@@ -129,6 +130,9 @@ inline void qYouForgotTheQ_MANAGED_Macro(T1, T2) {}
 #define DEFINE_MANAGED_VTABLE_INT(classname, parentVTable) \
 {     \
     parentVTable, \
+    (sizeof(classname::Data) + sizeof(QV4::Value) - 1)/sizeof(QV4::Value), \
+    (sizeof(classname::Data) + (std::is_same<classname, Object>::value ? 2*sizeof(QV4::Value) : 0) + QV4::Chunk::SlotSize - 1)/QV4::Chunk::SlotSize*QV4::Chunk::SlotSize/sizeof(QV4::Value) \
+        - (sizeof(classname::Data) + sizeof(QV4::Value) - 1)/sizeof(QV4::Value), \
     classname::IsExecutionContext,   \
     classname::IsString,   \
     classname::IsObject,   \
@@ -147,6 +151,10 @@ inline void qYouForgotTheQ_MANAGED_Macro(T1, T2) {}
 QT_WARNING_SUPPRESS_GCC_TAUTOLOGICAL_COMPARE_ON \
 const QV4::VTable classname::static_vtbl = DEFINE_MANAGED_VTABLE_INT(classname, 0) \
 QT_WARNING_SUPPRESS_GCC_TAUTOLOGICAL_COMPARE_OFF
+
+#define V4_INTERNALCLASS(c) \
+    static QV4::InternalClass *defaultInternalClass(QV4::EngineBase *e) \
+        { return e->internalClasses[QV4::EngineBase::Class_##c]; }
 
 struct Q_QML_PRIVATE_EXPORT Managed : Value
 {
@@ -189,6 +197,9 @@ public:
         Type_QmlSequence
     };
     Q_MANAGED_TYPE(Invalid)
+
+    InternalClass *internalClass() const { return d()->internalClass; }
+    inline ExecutionEngine *engine() const { return internalClass()->engine; }
 
     bool isListType() const { return d()->vtable()->type == Type_QmlSequence; }
 

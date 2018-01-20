@@ -145,6 +145,7 @@ QQuickControlPrivate::~QQuickControlPrivate()
 #endif
 }
 
+#if QT_CONFIG(quicktemplates2_multitouch)
 bool QQuickControlPrivate::acceptTouch(const QTouchEvent::TouchPoint &point)
 {
     if (point.id() == touchId)
@@ -157,6 +158,7 @@ bool QQuickControlPrivate::acceptTouch(const QTouchEvent::TouchPoint &point)
 
     return false;
 }
+#endif
 
 void QQuickControlPrivate::handlePress(const QPointF &)
 {
@@ -279,6 +281,27 @@ void QQuickControlPrivate::resizeContent()
 QQuickItem *QQuickControlPrivate::getContentItem()
 {
     return contentItem;
+}
+
+void QQuickControlPrivate::setContentItem_helper(QQuickItem *item, bool notify)
+{
+    Q_Q(QQuickControl);
+    if (contentItem == item)
+        return;
+
+    q->contentItemChange(item, contentItem);
+    destroyDelegate(contentItem, q);
+    contentItem = item;
+
+    if (item) {
+        if (!item->parentItem())
+            item->setParentItem(q);
+        if (componentComplete)
+            resizeContent();
+    }
+
+    if (notify)
+        emit q->contentItemChanged();
 }
 
 #if QT_CONFIG(accessibility)
@@ -1243,25 +1266,15 @@ void QQuickControl::setBackground(QQuickItem *background)
 QQuickItem *QQuickControl::contentItem() const
 {
     QQuickControlPrivate *d = const_cast<QQuickControlPrivate *>(d_func());
-    return d->getContentItem();
+    if (!d->contentItem)
+        d->setContentItem_helper(d->getContentItem(), false);
+    return d->contentItem;
 }
 
 void QQuickControl::setContentItem(QQuickItem *item)
 {
     Q_D(QQuickControl);
-    if (d->contentItem == item)
-        return;
-
-    contentItemChange(item, d->contentItem);
-    QQuickControlPrivate::destroyDelegate(d->contentItem, this);
-    d->contentItem = item;
-    if (item) {
-        if (!item->parentItem())
-            item->setParentItem(this);
-        if (isComponentComplete())
-            d->resizeContent();
-    }
-    emit contentItemChanged();
+    d->setContentItem_helper(item, true);
 }
 
 void QQuickControl::classBegin()
@@ -1355,6 +1368,7 @@ void QQuickControl::mouseUngrabEvent()
     d->handleUngrab();
 }
 
+#if QT_CONFIG(quicktemplates2_multitouch)
 void QQuickControl::touchEvent(QTouchEvent *event)
 {
     Q_D(QQuickControl);
@@ -1409,6 +1423,7 @@ void QQuickControl::touchUngrabEvent()
     Q_D(QQuickControl);
     d->handleUngrab();
 }
+#endif
 
 #if QT_CONFIG(wheelevent)
 void QQuickControl::wheelEvent(QWheelEvent *event)

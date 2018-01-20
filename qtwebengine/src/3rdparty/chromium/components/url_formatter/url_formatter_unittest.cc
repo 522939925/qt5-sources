@@ -125,7 +125,8 @@ const IDNTestCase idn_cases[] = {
   // ASCII-Latin + Japn (Kana + Han)
   // ASCII-Latin + Kore (Hangul + Han)
   // ASCII-Latin + Han + Bopomofo
-  // ASCII-Latin + any allowed script other than Cyrillic, Greek and Cherokee
+  // ASCII-Latin + any allowed script other than Cyrillic, Greek, Cherokee
+  // and Unified Canadian Syllabary
   // "payp<alpha>l.com"
   {"www.xn--paypl-g9d.com", L"payp\x03b1l.com", false},
   // google.gr with Greek omicron and epsilon
@@ -179,6 +180,11 @@ const IDNTestCase idn_cases[] = {
   {"xn--t2bes3ds6749n.com", L"\x0930\x094b\x0932\x0947\x76e7\x0938.com", false},
   // Devanagari + Bengali
   {"xn--11b0x.in", L"\x0915\x0995.in", false},
+  // Canadian Syllabary + Latin
+  {"xn--ab-lym.com", L"ab\x14BF.com", false},
+  {"xn--ab1-p6q.com", L"ab1\x14BF.com", false},
+  {"xn--1ab-m6qd.com", L"\x14BF" L"1ab.com", false},
+  {"xn--ab-jymc.com", L"\x14BF" L"ab.com", false},
 
   // Invisibility check
   // Thai tone mark malek(U+0E48) repeated
@@ -319,6 +325,10 @@ const IDNTestCase idn_cases[] = {
   {"xn--ab-yod.com", L"a\x05f4" L"b.com", false},
   // Hebrew Gershayim with Arabic is disallowed.
   {"xn--5eb7h.eg", L"\x0628\x05f4.eg", false},
+#if defined(OS_MACOSX)
+  // Tibetan transliteration characters are disallowed on Mac.
+  {"xn--com-luma.test.pl", L"\u0f8c.test.pl", false},
+#endif
 
   // Hyphens (http://unicode.org/cldr/utility/confusables.jsp?a=-)
   // Hyphen-Minus (the only hyphen allowed)

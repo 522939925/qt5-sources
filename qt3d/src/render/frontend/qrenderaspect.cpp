@@ -119,6 +119,7 @@
 #include <Qt3DRender/private/geometryrenderermanager_p.h>
 #include <Qt3DRender/private/loadgeometryjob_p.h>
 #include <Qt3DRender/private/qsceneimportfactory_p.h>
+#include <Qt3DRender/private/qsceneimporter_p.h>
 #include <Qt3DRender/private/frustumculling_p.h>
 #include <Qt3DRender/private/light_p.h>
 #include <Qt3DRender/private/environmentlight_p.h>
@@ -184,6 +185,7 @@ QRenderAspectPrivate::~QRenderAspectPrivate()
         qWarning() << Q_FUNC_INFO << "The renderer should have been deleted when reaching this point (this warning may be normal when running tests)";
     delete m_nodeManagers;
     m_instances.removeAll(this);
+    qDeleteAll(m_sceneImporter);
 }
 
 /*! \internal */
@@ -255,7 +257,7 @@ void QRenderAspectPrivate::registerBackendTypes()
     q->registerBackendType<QObjectPicker>(QSharedPointer<Render::NodeFunctor<Render::ObjectPicker, Render::ObjectPickerManager> >::create(m_renderer));
 
     // Plugins
-    for (const QString &plugin : m_pluginConfig)
+    for (const QString &plugin : qAsConst(m_pluginConfig))
         loadRenderPlugin(plugin);
 }
 

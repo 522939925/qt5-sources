@@ -59,6 +59,10 @@ QT_BEGIN_NAMESPACE
 
 namespace QV4 {
 
+struct MarkStack;
+
+typedef void(*ClassDestroyStatsCallback)(const char *);
+
 /*
  * Chunks are the basic structure containing GC managed objects.
  *
@@ -175,7 +179,7 @@ struct Chunk {
         return usedSlots;
     }
 
-    void sweep();
+    bool sweep();
     void freeAll();
 
     void sortIntoBins(HeapItem **bins, uint nBins);
@@ -255,33 +259,6 @@ Q_STATIC_ASSERT(1 << Chunk::SlotSizeShift == Chunk::SlotSize);
 Q_STATIC_ASSERT(sizeof(HeapItem) == Chunk::SlotSize);
 Q_STATIC_ASSERT(QT_POINTER_SIZE*8 == Chunk::Bits);
 Q_STATIC_ASSERT((1 << Chunk::BitShift) == Chunk::Bits);
-
-// Base class for the execution engine
-
-#if defined(Q_CC_MSVC) || defined(Q_CC_GNU)
-#pragma pack(push, 1)
-#endif
-struct EngineBase {
-    Heap::ExecutionContext *current = 0;
-
-    Value *jsStackTop = 0;
-    quint32 hasException = false;
-#if QT_POINTER_SIZE == 8
-    quint8 padding[4];
-#endif
-    MemoryManager *memoryManager = 0;
-    Runtime runtime;
-};
-#if defined(Q_CC_MSVC) || defined(Q_CC_GNU)
-#pragma pack(pop)
-#endif
-
-Q_STATIC_ASSERT(std::is_standard_layout<EngineBase>::value);
-Q_STATIC_ASSERT(offsetof(EngineBase, current) == 0);
-Q_STATIC_ASSERT(offsetof(EngineBase, jsStackTop) == offsetof(EngineBase, current) + QT_POINTER_SIZE);
-Q_STATIC_ASSERT(offsetof(EngineBase, hasException) == offsetof(EngineBase, jsStackTop) + QT_POINTER_SIZE);
-Q_STATIC_ASSERT(offsetof(EngineBase, memoryManager) == offsetof(EngineBase, hasException) + QT_POINTER_SIZE);
-Q_STATIC_ASSERT(offsetof(EngineBase, runtime) == offsetof(EngineBase, memoryManager) + QT_POINTER_SIZE);
 
 }
 

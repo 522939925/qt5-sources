@@ -29,6 +29,7 @@ const struct {
   GLImplementation implementation;
 } kGLImplementationNamePairs[] = {
   { kGLImplementationDesktopName, kGLImplementationDesktopGL },
+  { kGLImplementationCoreProfileName, kGLImplementationDesktopGLCoreProfile },
   { kGLImplementationOSMesaName, kGLImplementationOSMesaGL },
 #if defined(OS_MACOSX)
   { kGLImplementationAppleName, kGLImplementationAppleGL },
@@ -186,7 +187,8 @@ GLWindowSystemBindingInfo::GLWindowSystemBindingInfo()
 
 std::string GetGLExtensionsFromCurrentContext() {
   if (WillUseGLGetStringForExtensions()) {
-    return reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+    const char* str = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+    return str ? str : std::string();
   }
 
   std::vector<std::string> exts;

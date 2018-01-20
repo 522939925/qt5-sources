@@ -78,7 +78,9 @@ public:
         return control->d_func();
     }
 
+#if QT_CONFIG(quicktemplates2_multitouch)
     virtual bool acceptTouch(const QTouchEvent::TouchPoint &point);
+#endif
     virtual void handlePress(const QPointF &point);
     virtual void handleMove(const QPointF &point);
     virtual void handleRelease(const QPointF &point);
@@ -95,6 +97,7 @@ public:
     virtual void resizeContent();
 
     virtual QQuickItem *getContentItem();
+    void setContentItem_helper(QQuickItem *item, bool notify = true);
 
 #if QT_CONFIG(accessibility)
     void accessibilityActiveChanged(bool active) override;

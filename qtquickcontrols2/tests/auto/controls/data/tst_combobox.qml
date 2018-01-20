@@ -80,6 +80,14 @@ TestCase {
         }
     }
 
+    function init() {
+        // QTBUG-61225: Move the mouse away to avoid QQuickWindowPrivate::flushFrameSynchronousEvents()
+        // delivering interfering hover events based on the last mouse position from earlier tests. For
+        // example, ComboBox::test_activation() kept receiving hover events for the last mouse position
+        // from CheckDelegate::test_checked().
+        mouseMove(testCase, testCase.width - 1, testCase.height - 1)
+    }
+
     function test_defaults() {
         var control = createTemporaryObject(comboBox, testCase)
         verify(control)
@@ -140,6 +148,31 @@ TestCase {
         control.currentIndex = 2
         compare(control.currentIndex, 2)
         compare(control.currentText, "Banana")
+
+        control.model = null
+        compare(control.model, null)
+        compare(control.count, 0)
+        compare(control.currentIndex, -1)
+        compare(control.currentText, "")
+    }
+
+    function test_qobjects() {
+        var control = createTemporaryObject(emptyBox, testCase, {textRole: "text"})
+        verify(control)
+
+        var obj1 = Qt.createQmlObject("import QtQml 2.0; QtObject { property string text: 'one' }", control)
+        var obj2 = Qt.createQmlObject("import QtQml 2.0; QtObject { property string text: 'two' }", control)
+        var obj3 = Qt.createQmlObject("import QtQml 2.0; QtObject { property string text: 'three' }", control)
+
+        control.model = [obj1, obj2, obj3]
+
+        compare(control.count, 3)
+        compare(control.currentIndex, 0)
+        compare(control.currentText, "one")
+
+        control.currentIndex = 2
+        compare(control.currentIndex, 2)
+        compare(control.currentText, "three")
 
         control.model = null
         compare(control.model, null)
@@ -1133,6 +1166,7 @@ TestCase {
         control.popup.open()
         compare(control.highlightedIndex, 99)
         tryCompare(openedSpy, "count", 2)
+        tryVerify(function() { return listview.height > 0 })
 
         var last = listview.itemAt(0, listview.contentY + listview.height - 1)
         verify(last)
@@ -1426,5 +1460,28 @@ TestCase {
         control.currentIndex = 0
         compare(control.currentIndex, 0)
         compare(control.currentText, "A")
+    }
+
+    function test_emptyPopupAfterModelCleared() {
+        var control = createTemporaryObject(comboBox, testCase, { model: 1 })
+        verify(control)
+        compare(control.popup.implicitHeight, 0)
+        compare(control.popup.height, 0)
+
+        // Ensure that it's open so that the popup's implicitHeight changes when we increase the model count.
+        control.popup.open()
+        tryCompare(control.popup, "visible", true)
+
+        // Add lots of items to the model. The popup should take up the entire height of the window.
+        control.model = 100
+        compare(control.popup.height, control.Window.height - control.popup.topMargin - control.popup.bottomMargin)
+
+        control.popup.close()
+
+        // Clearing the model should result in a zero height.
+        control.model = 0
+        control.popup.open()
+        tryCompare(control.popup, "visible", true)
+        compare(control.popup.height, 0)
     }
 }

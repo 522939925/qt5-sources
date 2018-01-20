@@ -82,7 +82,7 @@ static QString cacheFilePath(const QUrl &url)
 {
     const QString localSourcePath = QQmlFile::urlToLocalFileOrQrc(url);
     const QString localCachePath = localSourcePath + QLatin1Char('c');
-    if (QFileInfo(QFileInfo(localSourcePath).dir().absolutePath()).isWritable())
+    if (QFile::exists(localCachePath) || QFileInfo(QFileInfo(localSourcePath).dir().absolutePath()).isWritable())
         return localCachePath;
     QCryptographicHash fileNameHash(QCryptographicHash::Sha1);
     fileNameHash.addData(localSourcePath.toUtf8());
@@ -99,6 +99,7 @@ CompilationUnit::CompilationUnit()
     , runtimeLookups(0)
     , runtimeRegularExpressions(0)
     , runtimeClasses(0)
+    , constants(nullptr)
     , totalBindingsCount(0)
     , totalParserStatusCount(0)
     , totalObjectCount(0)
@@ -177,7 +178,7 @@ QV4::Function *CompilationUnit::linkToEngine(ExecutionEngine *engine)
         for (uint i = 0; i < data->jsClassTableSize; ++i) {
             int memberCount = 0;
             const CompiledData::JSClassMember *member = data->jsClassAt(i, &memberCount);
-            QV4::InternalClass *klass = engine->emptyClass;
+            QV4::InternalClass *klass = engine->internalClasses[QV4::ExecutionEngine::Class_Object];
             for (int j = 0; j < memberCount; ++j, ++member)
                 klass = klass->addMember(runtimeStrings[member->nameOffset]->identifier, member->isAccessor ? QV4::Attr_Accessor : QV4::Attr_Data);
 
@@ -239,6 +240,7 @@ void CompilationUnit::unlink()
     runtimeFunctions.clear();
 #if Q_BYTE_ORDER == Q_BIG_ENDIAN
     delete [] constants;
+    constants = nullptr;
 #endif
 }
 

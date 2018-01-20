@@ -1,5 +1,4 @@
-false:qtHaveModule(webkitwidgets):!contains(QT_CONFIG, static) {
-    # FIXME: currently broken
+qtHaveModule(webkitwidgets):!contains(QT_CONFIG, static) {
     BROWSER = qtwebkit
 } else {
     BROWSER = qtextbrowser
@@ -119,7 +118,5 @@ mac {
     TARGET = Assistant
     QMAKE_INFO_PLIST = Info_mac.plist
 }
-
-contains(SQLPLUGINS, sqlite):QTPLUGIN += qsqlite
 
 load(qt_app)

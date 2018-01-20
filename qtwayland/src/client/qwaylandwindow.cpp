@@ -92,6 +92,7 @@ QWaylandWindow::QWaylandWindow(QWindow *window)
     , mResizeDirty(false)
     , mResizeAfterSwap(qEnvironmentVariableIsSet("QT_WAYLAND_RESIZE_AFTER_SWAP"))
     , mSentInitialResize(false)
+    , mScale(1)
     , mState(Qt::WindowNoState)
     , mMask()
     , mBackingStore(Q_NULLPTR)
@@ -189,9 +190,12 @@ void QWaylandWindow::initWindow()
         }
     }
 
+    mScale = screen()->scale();
+
     // Enable high-dpi rendering. Scale() returns the screen scale factor and will
     // typically be integer 1 (normal-dpi) or 2 (high-dpi). Call set_buffer_scale()
     // to inform the compositor that high-resolution buffers will be provided.
+    //FIXME this needs to be changed when the screen changes along with a resized backing store
     if (mDisplay->compositorVersion() >= 3)
         set_buffer_scale(scale());
 
@@ -203,6 +207,10 @@ void QWaylandWindow::initWindow()
     else
         setGeometry_helper(window()->geometry());
     setMask(window()->mask());
+    // setWindowStateInternal is a no-op if the argument is equal to mState,
+    // but since we're creating the shellsurface only now we reset mState to
+    // make sure the state gets sent out to the compositor
+    mState = Qt::WindowNoState;
     setWindowStateInternal(window()->windowState());
     handleContentOrientationChange(window()->contentOrientation());
     mFlags = window()->flags();
@@ -728,7 +736,7 @@ void QWaylandWindow::handleMouse(QWaylandInputDevice *inputDevice, const QWaylan
                 QWindowSystemInterface::handleMouseEvent(window(), e.timestamp, e.local, e.global, e.buttons, e.modifiers);
                 break;
             case QWaylandPointerEvent::Wheel:
-                QWindowSystemInterface::handleWheelEvent(window(), e.timestamp, e.local, e.global, e.pixelDelta, e.angleDelta);
+                QWindowSystemInterface::handleWheelEvent(window(), e.timestamp, e.local, e.global, e.pixelDelta, e.angleDelta, e.modifiers);
                 break;
         }
     }
@@ -796,7 +804,7 @@ void QWaylandWindow::handleMouseEventWithDecoration(QWaylandInputDevice *inputDe
                 QWindowSystemInterface::handleMouseEvent(window(), e.timestamp, localTranslated, globalTranslated, e.buttons, e.modifiers);
                 break;
             case QWaylandPointerEvent::Wheel:
-                QWindowSystemInterface::handleWheelEvent(window(), e.timestamp, localTranslated, globalTranslated, e.pixelDelta, e.angleDelta);
+                QWindowSystemInterface::handleWheelEvent(window(), e.timestamp, localTranslated, globalTranslated, e.pixelDelta, e.angleDelta, e.modifiers);
                 break;
         }
 
@@ -847,12 +855,12 @@ bool QWaylandWindow::isExposed() const
 
 int QWaylandWindow::scale() const
 {
-    return screen()->scale();
+    return mScale;
 }
 
 qreal QWaylandWindow::devicePixelRatio() const
 {
-    return screen()->devicePixelRatio();
+    return mScale;
 }
 
 bool QWaylandWindow::setMouseGrabEnabled(bool grab)

@@ -75,7 +75,7 @@ void Heap::ErrorObject::init()
     Scope scope(internalClass->engine);
     Scoped<QV4::ErrorObject> e(scope, this);
 
-    if (internalClass == scope.engine->errorProtoClass)
+    if (internalClass == scope.engine->internalClasses[EngineBase::Class_ErrorProto])
         return;
 
     *propertyData(QV4::ErrorObject::Index_Stack) = scope.engine->getStackFunction();
@@ -182,8 +182,6 @@ void ErrorObject::markObjects(Heap::Base *that, ExecutionEngine *e)
 }
 
 DEFINE_OBJECT_VTABLE(ErrorObject);
-
-DEFINE_OBJECT_VTABLE(SyntaxErrorObject);
 
 void Heap::SyntaxErrorObject::init(const Value &msg)
 {
@@ -330,8 +328,7 @@ void ErrorPrototype::init(ExecutionEngine *engine, Object *ctor, Object *obj, He
     *obj->propertyData(Index_Constructor) = ctor;
     *obj->propertyData(Index_Message) = engine->id_empty();
     *obj->propertyData(Index_Name) = engine->newString(QString::fromLatin1(ErrorObject::className(t)));
-    if (t == Heap::ErrorObject::Error)
-        obj->defineDefaultProperty(engine->id_toString(), method_toString, 0);
+    obj->defineDefaultProperty(engine->id_toString(), method_toString, 0);
 }
 
 void ErrorPrototype::method_toString(const BuiltinFunction *, Scope &scope, CallData *callData)

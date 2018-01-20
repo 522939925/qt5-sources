@@ -343,7 +343,7 @@ IDNSpoofChecker::IDNSpoofChecker() {
 
 bool IDNSpoofChecker::Check(base::StringPiece16 label, bool is_tld_ascii) {
   UErrorCode status = U_ZERO_ERROR;
-  int32_t result = uspoof_check(checker_, label.data(),
+  int32_t result = uspoof_check(checker_, (const UChar*)label.data(),
                                 base::checked_cast<int32_t>(label.size()),
                                 NULL, &status);
   // If uspoof_check fails (due to library failure), or if any of the checks
@@ -351,7 +351,7 @@ bool IDNSpoofChecker::Check(base::StringPiece16 label, bool is_tld_ascii) {
   if (U_FAILURE(status) || (result & USPOOF_ALL_CHECKS))
     return false;
 
-  icu::UnicodeString label_string(FALSE, label.data(),
+  icu::UnicodeString label_string(FALSE, (const UChar*)label.data(),
                                   base::checked_cast<int32_t>(label.size()));
 
   // A punycode label with 'xn--' prefix is not subject to the URL
@@ -412,6 +412,7 @@ bool IDNSpoofChecker::Check(base::StringPiece16 label, bool is_tld_ascii) {
     // - Disallow U+0585 (Armenian Small Letter Oh) and U+0581 (Armenian Small
     //   Letter Co) to be next to Latin.
     // - Disallow Latin 'o' and 'g' next to Armenian.
+    // - Disalow mixing of Latin and Canadian Syllabary.
     dangerous_pattern = new icu::RegexMatcher(
         icu::UnicodeString(
             "[^\\p{scx=kana}\\p{scx=hira}\\p{scx=hani}]"
@@ -425,7 +426,9 @@ bool IDNSpoofChecker::Check(base::StringPiece16 label, bool is_tld_ascii) {
             "^[\\u0585\\u0581]+[a-z]|[a-z][\\u0585\\u0581]+$|"
             "[a-z][\\u0585\\u0581]+[a-z]|"
             "^[og]+[\\p{scx=armn}]|[\\p{scx=armn}][og]+$|"
-            "[\\p{scx=armn}][og]+[\\p{scx=armn}]", -1, US_INV),
+            "[\\p{scx=armn}][og]+[\\p{scx=armn}]|"
+            "[\\p{sc=cans}].*[a-z]|[a-z].*[\\p{sc=cans}]",
+            -1, US_INV),
         0, status);
     tls_index.Set(dangerous_pattern);
   }
@@ -519,6 +522,17 @@ void IDNSpoofChecker::SetAllowedUnicodeSet(UErrorCode* status) {
   allowed_set.remove(0x2010u);  // Hyphen
   allowed_set.remove(0x2027u);  // Hyphenation Point
 
+#if defined(OS_MACOSX)
+  // The following characters are reported as present in the default macOS
+  // system UI font, but they render as blank. Remove them from the allowed
+  // set to prevent spoofing.
+  // Tibetan characters used for transliteration of ancient texts:
+  allowed_set.remove(0x0F8Cu);
+  allowed_set.remove(0x0F8Du);
+  allowed_set.remove(0x0F8Eu);
+  allowed_set.remove(0x0F8Fu);
+#endif
+
   uspoof_setAllowedUnicodeSet(checker_, &allowed_set, status);
 }
 
@@ -595,7 +609,7 @@ bool IDNToUnicodeOneComponent(const base::char16* comp,
       // code units, |status| will be U_BUFFER_OVERFLOW_ERROR and we'll try
       // the conversion again, but with a sufficiently large buffer.
       output_length = uidna_labelToUnicode(
-          uidna, comp, static_cast<int32_t>(comp_len), &(*out)[original_length],
+          uidna, (const UChar*)comp, static_cast<int32_t>(comp_len), (UChar*)&(*out)[original_length],
           output_length, &info, &status);
     } while ((status == U_BUFFER_OVERFLOW_ERROR && info.errors == 0));
 

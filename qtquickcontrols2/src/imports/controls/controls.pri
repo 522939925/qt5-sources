@@ -2,7 +2,7 @@ HEADERS += \
     $$PWD/qquickdialring_p.h \
     $$PWD/qquickdefaultbusyindicator_p.h \
     $$PWD/qquickdefaultprogressbar_p.h \
-    $$PWD/qquickdefaultstyle_p.h \
+    $$PWD/qquickdefaultstyle_p.h
 
 SOURCES += \
     $$PWD/qquickdialring.cpp \
@@ -15,6 +15,7 @@ QML_CONTROLS = \
     $$PWD/ApplicationWindow.qml \
     $$PWD/BusyIndicator.qml \
     $$PWD/Button.qml \
+    $$PWD/ButtonGroup.qml \
     $$PWD/CheckBox.qml \
     $$PWD/CheckDelegate.qml \
     $$PWD/CheckIndicator.qml \

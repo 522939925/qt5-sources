@@ -103,7 +103,7 @@ QT_BEGIN_NAMESPACE
 
     \section1 Popup Layout
 
-    The following diagram illustrates the layout of a typical popup:
+    The following diagram illustrates the layout of a popup within a window:
 
     \image qtquickcontrols2-popup.png
 
@@ -299,6 +299,7 @@ bool QQuickPopupPrivate::contains(const QPointF &scenePos) const
     return popupItem->contains(popupItem->mapFromScene(scenePos));
 }
 
+#if QT_CONFIG(quicktemplates2_multitouch)
 bool QQuickPopupPrivate::acceptTouch(const QTouchEvent::TouchPoint &point)
 {
     if (point.id() == touchId)
@@ -311,6 +312,7 @@ bool QQuickPopupPrivate::acceptTouch(const QTouchEvent::TouchPoint &point)
 
     return false;
 }
+#endif
 
 bool QQuickPopupPrivate::blockInput(QQuickItem *item, const QPointF &point) const
 {
@@ -373,6 +375,7 @@ bool QQuickPopupPrivate::handleMouseEvent(QQuickItem *item, QMouseEvent *event)
     }
 }
 
+#if QT_CONFIG(quicktemplates2_multitouch)
 bool QQuickPopupPrivate::handleTouchEvent(QQuickItem *item, QTouchEvent *event)
 {
     switch (event->type()) {
@@ -418,6 +421,7 @@ bool QQuickPopupPrivate::handleTouchEvent(QQuickItem *item, QTouchEvent *event)
 
     return false;
 }
+#endif
 
 bool QQuickPopupPrivate::prepareEnterTransition()
 {
@@ -564,13 +568,19 @@ void QQuickPopupPrivate::setWindow(QQuickWindow *newWindow)
             QQuickOverlayPrivate::get(overlay)->removePopup(q);
     }
 
+    window = newWindow;
+
     if (newWindow) {
         QQuickOverlay *overlay = QQuickOverlay::overlay(newWindow);
         if (overlay)
             QQuickOverlayPrivate::get(overlay)->addPopup(q);
+
+        QQuickControlPrivate *p = QQuickControlPrivate::get(popupItem);
+        p->resolveFont();
+        if (QQuickApplicationWindow *appWindow = qobject_cast<QQuickApplicationWindow *>(newWindow))
+            p->updateLocale(appWindow->locale(), false); // explicit=false
     }
 
-    window = newWindow;
     emit q->windowChanged(newWindow);
 
     if (complete && visible && window)
@@ -952,7 +962,7 @@ qreal QQuickPopup::availableHeight() const
 }
 
 /*!
-    \since QtQuick.Controls 2.1
+    \since QtQuick.Controls 2.1 (Qt 5.8)
     \qmlproperty real QtQuick.Controls::Popup::spacing
 
     This property holds the spacing.
@@ -983,12 +993,13 @@ void QQuickPopup::resetSpacing()
 /*!
     \qmlproperty real QtQuick.Controls::Popup::margins
 
-    This property holds the default margins around the popup.
+    This property holds the distance between the edges of the popup and the
+    edges of its window.
 
     A popup with negative margins is not pushed within the bounds
     of the enclosing window. The default value is \c -1.
 
-    \sa topMargin, leftMargin, rightMargin, bottomMargin
+    \sa topMargin, leftMargin, rightMargin, bottomMargin, {Popup Layout}
 */
 qreal QQuickPopup::margins() const
 {
@@ -1024,12 +1035,13 @@ void QQuickPopup::resetMargins()
 /*!
     \qmlproperty real QtQuick.Controls::Popup::topMargin
 
-    This property holds the top margin around the popup.
+    This property holds the distance between the top edge of the popup and
+    the top edge of its window.
 
     A popup with a negative top margin is not pushed within the top edge
     of the enclosing window. The default value is \c -1.
 
-    \sa margins, bottomMargin
+    \sa margins, bottomMargin, {Popup Layout}
 */
 qreal QQuickPopup::topMargin() const
 {
@@ -1054,12 +1066,13 @@ void QQuickPopup::resetTopMargin()
 /*!
     \qmlproperty real QtQuick.Controls::Popup::leftMargin
 
-    This property holds the left margin around the popup.
+    This property holds the distance between the left edge of the popup and
+    the left edge of its window.
 
     A popup with a negative left margin is not pushed within the left edge
     of the enclosing window. The default value is \c -1.
 
-    \sa margins, rightMargin
+    \sa margins, rightMargin, {Popup Layout}
 */
 qreal QQuickPopup::leftMargin() const
 {
@@ -1084,12 +1097,13 @@ void QQuickPopup::resetLeftMargin()
 /*!
     \qmlproperty real QtQuick.Controls::Popup::rightMargin
 
-    This property holds the right margin around the popup.
+    This property holds the distance between the right edge of the popup and
+    the right edge of its window.
 
     A popup with a negative right margin is not pushed within the right edge
     of the enclosing window. The default value is \c -1.
 
-    \sa margins, leftMargin
+    \sa margins, leftMargin, {Popup Layout}
 */
 qreal QQuickPopup::rightMargin() const
 {
@@ -1114,12 +1128,13 @@ void QQuickPopup::resetRightMargin()
 /*!
     \qmlproperty real QtQuick.Controls::Popup::bottomMargin
 
-    This property holds the bottom margin around the popup.
+    This property holds the distance between the bottom edge of the popup and
+    the bottom edge of its window.
 
     A popup with a negative bottom margin is not pushed within the bottom edge
     of the enclosing window. The default value is \c -1.
 
-    \sa margins, topMargin
+    \sa margins, topMargin, {Popup Layout}
 */
 qreal QQuickPopup::bottomMargin() const
 {
@@ -1385,11 +1400,6 @@ void QQuickPopup::setParentItem(QQuickItem *parent)
     if (parent) {
         QObjectPrivate::connect(parent, &QQuickItem::windowChanged, d, &QQuickPopupPrivate::setWindow);
         QQuickItemPrivate::get(d->parentItem)->addItemChangeListener(d, QQuickItemPrivate::Destroyed);
-
-        QQuickControlPrivate *p = QQuickControlPrivate::get(d->popupItem);
-        p->resolveFont();
-        if (QQuickApplicationWindow *window = qobject_cast<QQuickApplicationWindow *>(parent->window()))
-            p->updateLocale(window->locale(), false); // explicit=false
     } else {
         close();
     }
@@ -1982,10 +1992,12 @@ bool QQuickPopup::overlayEvent(QQuickItem *item, QEvent *event)
             event->accept();
         return d->modal;
 
+#if QT_CONFIG(quicktemplates2_multitouch)
     case QEvent::TouchBegin:
     case QEvent::TouchUpdate:
     case QEvent::TouchEnd:
         return d->handleTouchEvent(item, static_cast<QTouchEvent *>(event));
+#endif
 
     case QEvent::MouseButtonPress:
     case QEvent::MouseButtonRelease:
@@ -1996,6 +2008,7 @@ bool QQuickPopup::overlayEvent(QQuickItem *item, QEvent *event)
     }
 }
 
+#if QT_CONFIG(quicktemplates2_multitouch)
 void QQuickPopup::touchEvent(QTouchEvent *event)
 {
     Q_D(QQuickPopup);
@@ -2007,6 +2020,7 @@ void QQuickPopup::touchUngrabEvent()
     Q_D(QQuickPopup);
     d->handleUngrab();
 }
+#endif
 
 #if QT_CONFIG(wheelevent)
 void QQuickPopup::wheelEvent(QWheelEvent *event)
