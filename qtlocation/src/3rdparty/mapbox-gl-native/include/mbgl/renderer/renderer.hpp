@@ -1,7 +1,7 @@
 #pragma once
 
-#include <mbgl/map/mode.hpp>
 #include <mbgl/renderer/query.hpp>
+#include <mbgl/renderer/mode.hpp>
 #include <mbgl/annotation/annotation.hpp>
 #include <mbgl/util/geo.hpp>
 #include <mbgl/util/geo.hpp>
@@ -27,6 +27,8 @@ public:
              GLContextMode = GLContextMode::Unique,
              const optional<std::string> programCacheDir = {});
     ~Renderer();
+
+    void markContextLost();
 
     void setObserver(RendererObserver*);
 

@@ -2,7 +2,7 @@ TARGET = qmapboxgl
 
 load(qt_helper_lib)
 
-CONFIG += qt c++14 exceptions warn_off staticlib
+CONFIG += qt c++14 exceptions warn_off staticlib object_parallel_to_source
 
 QT += network-private \
       gui-private \
@@ -12,6 +12,7 @@ QMAKE_CXXFLAGS += \
     -DNDEBUG \
     -DQT_IMAGE_DECODERS \
     -DRAPIDJSON_HAS_STDSTRING=1 \
+    -DMBGL_USE_GLES2 \
     -D__QT__ \
     -O3 \
     -ftemplate-depth=1024 \
@@ -39,17 +40,6 @@ win32 {
         -D_USE_MATH_DEFINES
 }
 
-win32:qtConfig(dynamicgl) {
-    QMAKE_CXXFLAGS += \
-        -DMBGL_USE_GLES2 \
-        -DQT_OPENGL_ES_2
-}
-
-qtConfig(opengles2) {
-    QMAKE_CXXFLAGS += \
-        -DMBGL_USE_GLES2
-}
-
 qtConfig(system-zlib) {
     QMAKE_USE_PRIVATE += zlib
 } else {
@@ -60,6 +50,8 @@ qtConfig(system-zlib) {
 TR_EXCLUDE += $$PWD/*
 
 qtConfig(icu) {
+    QMAKE_USE_PRIVATE += icu
+
     SOURCES += \
         platform/default/bidi.cpp
 } else {
@@ -74,6 +66,7 @@ SOURCES += \
     platform/qt/src/qmapbox.cpp \
     platform/qt/src/qmapboxgl.cpp \
     platform/qt/src/qmapboxgl_renderer_frontend_p.cpp \
+    platform/qt/src/qt_geojson.cpp \
     platform/qt/src/qt_image.cpp \
     platform/qt/src/run_loop.cpp \
     platform/qt/src/sqlite3.cpp \
@@ -153,7 +146,6 @@ SOURCES += \
     src/mbgl/renderer/render_light.cpp \
     src/mbgl/renderer/render_source.cpp \
     src/mbgl/renderer/render_static_data.cpp \
-    src/mbgl/renderer/render_style.cpp \
     src/mbgl/renderer/render_tile.cpp \
     src/mbgl/renderer/renderer.cpp \
     src/mbgl/renderer/renderer_backend.cpp \
@@ -185,12 +177,21 @@ SOURCES += \
     src/mbgl/sprite/sprite_loader.cpp \
     src/mbgl/sprite/sprite_loader_worker.cpp \
     src/mbgl/sprite/sprite_parser.cpp \
-    src/mbgl/storage/file_source_request.cpp \
     src/mbgl/storage/network_status.cpp \
     src/mbgl/storage/resource.cpp \
     src/mbgl/storage/resource_transform.cpp \
     src/mbgl/storage/response.cpp \
+    src/mbgl/style/conversion/constant.cpp \
+    src/mbgl/style/conversion/coordinate.cpp \
+    src/mbgl/style/conversion/filter.cpp \
     src/mbgl/style/conversion/geojson.cpp \
+    src/mbgl/style/conversion/geojson_options.cpp \
+    src/mbgl/style/conversion/layer.cpp \
+    src/mbgl/style/conversion/light.cpp \
+    src/mbgl/style/conversion/position.cpp \
+    src/mbgl/style/conversion/source.cpp \
+    src/mbgl/style/conversion/tileset.cpp \
+    src/mbgl/style/conversion/transition_options.cpp \
     src/mbgl/style/function/categorical_stops.cpp \
     src/mbgl/style/function/identity_stops.cpp \
     src/mbgl/style/image.cpp \
@@ -254,6 +255,7 @@ SOURCES += \
     src/mbgl/tile/raster_tile_worker.cpp \
     src/mbgl/tile/tile.cpp \
     src/mbgl/tile/tile_cache.cpp \
+    src/mbgl/tile/tile_id_hash.cpp \
     src/mbgl/tile/tile_id_io.cpp \
     src/mbgl/tile/vector_tile.cpp \
     src/mbgl/tile/vector_tile_data.cpp \
@@ -292,14 +294,15 @@ SOURCES += \
     src/parsedate/parsedate.c \
 	platform/default/asset_file_source.cpp \
 	platform/default/default_file_source.cpp \
+	platform/default/file_source_request.cpp \
 	platform/default/local_file_source.cpp \
-	platform/default/online_file_source.cpp \
+	platform/default/logging_stderr.cpp \
 	platform/default/mbgl/storage/offline.cpp \
 	platform/default/mbgl/storage/offline_database.cpp \
 	platform/default/mbgl/storage/offline_download.cpp \
-	platform/default/logging_stderr.cpp \
+	platform/default/mbgl/util/default_thread_pool.cpp \
 	platform/default/mbgl/util/shared_thread_pool.cpp \
-	platform/default/mbgl/util/default_thread_pool.cpp
+	platform/default/online_file_source.cpp
 
 HEADERS += \
     platform/qt/include/qmapbox.hpp \
@@ -321,12 +324,12 @@ INCLUDEPATH += \
     deps/boost/1.62.0/include \
     deps/cheap-ruler/2.5.3 \
     deps/cheap-ruler/2.5.3/include \
-    deps/earcut/0.12.3 \
-    deps/earcut/0.12.3/include \
-    deps/geojson/0.4.0 \
-    deps/geojson/0.4.0/include \
-    deps/geojsonvt/6.2.1 \
-    deps/geojsonvt/6.2.1/include \
+    deps/earcut/0.12.4 \
+    deps/earcut/0.12.4/include \
+    deps/geojson/0.4.2 \
+    deps/geojson/0.4.2/include \
+    deps/geojsonvt/6.3.0 \
+    deps/geojsonvt/6.3.0/include \
     deps/geometry/0.9.2 \
     deps/geometry/0.9.2/include \
     deps/kdbush/0.1.1-1 \
@@ -353,8 +356,9 @@ INCLUDEPATH += \
     deps/wagyu/0.4.3/include \
     include \
     platform/default \
+    platform/qt \
     platform/qt/include \
     src
 
 QMAKE_CXXFLAGS += \
-    -DMBGL_VERSION_REV=\\\"qt-v1.1.0\\\"
+    -DMBGL_VERSION_REV=\\\"qt-v1.1.1\\\"

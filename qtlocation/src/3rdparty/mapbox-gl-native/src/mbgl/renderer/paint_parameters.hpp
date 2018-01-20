@@ -2,6 +2,7 @@
 
 #include <mbgl/renderer/render_pass.hpp>
 #include <mbgl/renderer/render_light.hpp>
+#include <mbgl/renderer/mode.hpp>
 #include <mbgl/map/mode.hpp>
 #include <mbgl/gl/depth_mode.hpp>
 #include <mbgl/gl/stencil_mode.hpp>
@@ -15,7 +16,6 @@ namespace mbgl {
 
 class RendererBackend;
 class UpdateParameters;
-class RenderStyle;
 class RenderStaticData;
 class FrameHistory;
 class Programs;
@@ -31,9 +31,11 @@ public:
                     GLContextMode,
                     RendererBackend&,
                     const UpdateParameters&,
-                    RenderStyle&,
+                    const EvaluatedLight&,
                     RenderStaticData&,
-                    FrameHistory&);
+                    FrameHistory&,
+                    ImageManager&,
+                    LineAtlas&);
 
     gl::Context& context;
     RendererBackend& backend;
@@ -59,6 +61,7 @@ public:
     Programs& programs;
 
     gl::DepthMode depthModeForSublayer(uint8_t n, gl::DepthMode::Mask) const;
+    gl::DepthMode depthModeFor3D(gl::DepthMode::Mask) const;
     gl::StencilMode stencilModeForClipping(const ClipID&) const;
     gl::ColorMode colorModeForRenderPass() const;
 

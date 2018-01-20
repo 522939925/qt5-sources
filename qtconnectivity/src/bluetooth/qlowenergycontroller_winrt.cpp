@@ -40,6 +40,7 @@
 #include "qlowenergycontroller_p.h"
 
 #include <QtCore/qfunctions_winrt.h>
+#include <QtCore/QtEndian>
 #include <QtCore/QLoggingCategory>
 #include <private/qeventdispatcher_winrt_p.h>
 
@@ -650,6 +651,7 @@ void QLowEnergyControllerPrivate::discoverServiceDetails(const QBluetoothUuid &s
 
 void QLowEnergyControllerPrivate::startAdvertising(const QLowEnergyAdvertisingParameters &, const QLowEnergyAdvertisingData &, const QLowEnergyAdvertisingData &)
 {
+    setError(QLowEnergyController::AdvertisingError);
     Q_UNIMPLEMENTED();
 }
 
@@ -668,6 +670,12 @@ void QLowEnergyControllerPrivate::readCharacteristic(const QSharedPointer<QLowEn
 {
     qCDebug(QT_BT_WINRT) << __FUNCTION__ << service << charHandle;
     Q_ASSERT(!service.isNull());
+    if (role == QLowEnergyController::PeripheralRole) {
+        service->setError(QLowEnergyService::CharacteristicReadError);
+        Q_UNIMPLEMENTED();
+        return;
+    }
+
     if (!service->characteristicList.contains(charHandle)) {
         qCDebug(QT_BT_WINRT) << charHandle << "could not be found in service" << service->uuid;
         service->setError(QLowEnergyService::CharacteristicReadError);
@@ -727,6 +735,12 @@ void QLowEnergyControllerPrivate::readDescriptor(const QSharedPointer<QLowEnergy
 {
     qCDebug(QT_BT_WINRT) << __FUNCTION__ << service << charHandle << descHandle;
     Q_ASSERT(!service.isNull());
+    if (role == QLowEnergyController::PeripheralRole) {
+        service->setError(QLowEnergyService::DescriptorReadError);
+        Q_UNIMPLEMENTED();
+        return;
+    }
+
     if (!service->characteristicList.contains(charHandle)) {
         qCDebug(QT_BT_WINRT) << "Descriptor" << descHandle << "in characteristic" << charHandle
                              << "cannot be found in service" << service->uuid;
@@ -853,6 +867,11 @@ void QLowEnergyControllerPrivate::writeCharacteristic(const QSharedPointer<QLowE
 {
     qCDebug(QT_BT_WINRT) << __FUNCTION__ << service << charHandle << newValue << mode;
     Q_ASSERT(!service.isNull());
+    if (role == QLowEnergyController::PeripheralRole) {
+        service->setError(QLowEnergyService::CharacteristicWriteError);
+        Q_UNIMPLEMENTED();
+        return;
+    }
     if (!service->characteristicList.contains(charHandle)) {
         qCDebug(QT_BT_WINRT) << "Characteristic" << charHandle << "cannot be found in service" << service->uuid;
         service->setError(QLowEnergyService::CharacteristicWriteError);
@@ -937,6 +956,12 @@ void QLowEnergyControllerPrivate::writeDescriptor(
 {
     qCDebug(QT_BT_WINRT) << __FUNCTION__ << service << charHandle << descHandle << newValue;
     Q_ASSERT(!service.isNull());
+    if (role == QLowEnergyController::PeripheralRole) {
+        service->setError(QLowEnergyService::DescriptorWriteError);
+        Q_UNIMPLEMENTED();
+        return;
+    }
+
     if (!service->characteristicList.contains(charHandle)) {
         qCDebug(QT_BT_WINRT) << "Descriptor" << descHandle << "in characteristic" << charHandle
                              << "could not be found in service" << service->uuid;

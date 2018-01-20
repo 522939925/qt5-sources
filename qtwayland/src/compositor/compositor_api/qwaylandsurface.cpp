@@ -445,7 +445,7 @@ bool QWaylandSurface::isInitialized() const
 }
 
 /*!
- * \qmlproperty object QtWaylandCompositor::WaylandSurface::client
+ * \qmlproperty WaylandClient QtWaylandCompositor::WaylandSurface::client
  *
  * This property holds the client using this WaylandSurface.
  */
@@ -666,7 +666,11 @@ bool QWaylandSurface::isDestroyed() const
 void QWaylandSurface::markAsCursorSurface(bool cursorSurface)
 {
     Q_D(QWaylandSurface);
+    if (d->isCursorSurface == cursorSurface)
+        return;
+
     d->isCursorSurface = cursorSurface;
+    emit cursorSurfaceChanged();
 }
 
 bool QWaylandSurface::isCursorSurface() const
