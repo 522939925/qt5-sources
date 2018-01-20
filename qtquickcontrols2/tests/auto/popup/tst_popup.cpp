@@ -79,6 +79,8 @@ private slots:
     void cursorShape();
     void componentComplete();
     void closeOnEscapeWithNestedPopups();
+    void orientation_data();
+    void orientation();
 };
 
 void tst_popup::initTestCase()
@@ -285,6 +287,40 @@ void tst_popup::overlay()
 
     QVERIFY(!popup->isVisible());
     QCOMPARE(overlay->isVisible(), popup->isVisible());
+
+    // multi-touch
+    popup->open();
+    QVERIFY(popup->isVisible());
+    QVERIFY(overlay->isVisible());
+    QVERIFY(!button->isPressed());
+
+    QTest::touchEvent(window, device.data()).press(0, button->mapToScene(QPointF(1, 1)).toPoint());
+    QVERIFY(popup->isVisible());
+    QVERIFY(overlay->isVisible());
+    QCOMPARE(button->isPressed(), !modal);
+    QCOMPARE(overlayPressedSignal.count(), ++overlayPressCount);
+    QCOMPARE(overlayReleasedSignal.count(), overlayReleaseCount);
+
+    QTest::touchEvent(window, device.data()).stationary(0).press(1, button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
+    QVERIFY(popup->isVisible());
+    QVERIFY(overlay->isVisible());
+    QCOMPARE(button->isPressed(), !modal);
+    QCOMPARE(overlayPressedSignal.count(), ++overlayPressCount);
+    QCOMPARE(overlayReleasedSignal.count(), overlayReleaseCount);
+
+    QTest::touchEvent(window, device.data()).release(0, button->mapToScene(QPointF(1, 1)).toPoint()).stationary(1);
+    QVERIFY(!popup->isVisible());
+    QVERIFY(!overlay->isVisible());
+    QVERIFY(!button->isPressed());
+    QCOMPARE(overlayPressedSignal.count(), overlayPressCount);
+    QCOMPARE(overlayReleasedSignal.count(), ++overlayReleaseCount);
+
+    QTest::touchEvent(window, device.data()).release(1, button->mapToScene(QPointF(button->width() / 2, button->height() / 2)).toPoint());
+    QVERIFY(!popup->isVisible());
+    QVERIFY(!overlay->isVisible());
+    QVERIFY(!button->isPressed());
+    QCOMPARE(overlayPressedSignal.count(), overlayPressCount);
+    QCOMPARE(overlayReleasedSignal.count(), overlayReleaseCount);
 }
 
 void tst_popup::zOrder_data()
@@ -904,6 +940,36 @@ void tst_popup::closeOnEscapeWithNestedPopups()
     // Remove one by pressing the Escape key (the Shortcut should be activated).
     QTest::keyClick(window, Qt::Key_Escape);
     QCOMPARE(stackView->depth(), 1);
+}
+
+void tst_popup::orientation_data()
+{
+    QTest::addColumn<Qt::ScreenOrientation>("orientation");
+    QTest::addColumn<QPointF>("position");
+
+    QTest::newRow("Portrait") << Qt::PortraitOrientation << QPointF(330, 165);
+    QTest::newRow("Landscape") << Qt::LandscapeOrientation << QPointF(165, 270);
+    QTest::newRow("InvertedPortrait") << Qt::InvertedPortraitOrientation << QPointF(270, 135);
+    QTest::newRow("InvertedLandscape") << Qt::InvertedLandscapeOrientation << QPointF(135, 330);
+}
+
+void tst_popup::orientation()
+{
+    QFETCH(Qt::ScreenOrientation, orientation);
+    QFETCH(QPointF, position);
+
+    QQuickApplicationHelper helper(this, "orientation.qml");
+
+    QQuickWindow *window = helper.window;
+    window->reportContentOrientationChange(orientation);
+    window->show();
+    QVERIFY(QTest::qWaitForWindowActive(window));
+
+    QQuickPopup *popup = window->property("popup").value<QQuickPopup*>();
+    QVERIFY(popup);
+    popup->open();
+
+    QCOMPARE(popup->popupItem()->position(), position);
 }
 
 QTEST_MAIN(tst_popup)

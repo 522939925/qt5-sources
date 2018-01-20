@@ -76,7 +76,7 @@ static base::StringPiece PlatformResourceProvider(int key) {
 // Logging logic is based on chrome/common/logging_chrome.cc:
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+// found in the LICENSE.Chromium file.
 
 static logging::LoggingDestination DetermineLogMode(const base::CommandLine& command_line)
 {
@@ -139,10 +139,15 @@ content::ContentRendererClient *ContentMainDelegateQt::CreateContentRendererClie
 {
 #if defined(OS_LINUX)
     base::CommandLine *parsedCommandLine = base::CommandLine::ForCurrentProcess();
+    std::string process_type = parsedCommandLine->GetSwitchValueASCII(switches::kProcessType);
+    bool no_sandbox = parsedCommandLine->HasSwitch(switches::kNoSandbox);
 
-    if (parsedCommandLine->HasSwitch(switches::kLang)) {
-        const std::string &locale = parsedCommandLine->GetSwitchValueASCII(switches::kLang);
-        ui::ResourceBundle::GetSharedInstance().ReloadLocaleResources(locale);
+    // Reload locale if the renderer process is sandboxed
+    if (process_type == switches::kRendererProcess && !no_sandbox) {
+        if (parsedCommandLine->HasSwitch(switches::kLang)) {
+            const std::string &locale = parsedCommandLine->GetSwitchValueASCII(switches::kLang);
+            ui::ResourceBundle::GetSharedInstance().ReloadLocaleResources(locale);
+        }
     }
 #endif
 

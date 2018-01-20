@@ -56,6 +56,7 @@
 #include <qmenu.h>
 #include <qmetaobject.h>
 #include <qpixmap.h>
+#include <qregexp.h>
 #include <qstatusbar.h>
 #include <qwhatsthis.h>
 #include <ocidl.h>
@@ -1428,8 +1429,14 @@ LRESULT QT_WIN_CALLBACK QAxServerBase::ActiveXProc(HWND hWnd, UINT uMsg, WPARAM 
                             && !that->qt.widget->isVisible()) {
                             HWND h = static_cast<HWND>(QGuiApplication::platformNativeInterface()->
                                                        nativeResourceForWindow("handle", widgetWindow));
-                            if (h)
+                            if (h) {
                                 ::SetParent(h, that->m_hWnd);
+                                // Since the window is already created, we need to set the
+                                // property directly to ensure it does not believe it is
+                                // toplevel.
+                                widgetWindow->setProperty("_q_embedded_native_parent_handle",
+                                                          WId(that->m_hWnd));
+                            }
                             Qt::WindowFlags flags = widgetWindow->flags();
                             widgetWindow->setFlags(flags | Qt::FramelessWindowHint);
                         }
@@ -2342,7 +2349,7 @@ HRESULT WINAPI QAxServerBase::Invoke(DISPID dispidMember, REFIID riid,
                 break;
             }
         }
-        // FALLTHROUGH if wFlags == DISPATCH_PROPERTYGET|DISPATCH_METHOD AND not a property.
+        Q_FALLTHROUGH(); // Fall through if wFlags == DISPATCH_PROPERTYGET|DISPATCH_METHOD AND not a property.
     case DISPATCH_METHOD:
         {
             int nameLength = 0;

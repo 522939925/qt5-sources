@@ -740,7 +740,7 @@ void QWaylandQuickItem::handleSubsurfaceAdded(QWaylandSurface *childSurface)
 
 
 /*!
-  \qmlproperty bool QtWaylandCompositor::WaylandQuickItem::subsurfaceHandler
+  \qmlproperty object QtWaylandCompositor::WaylandQuickItem::subsurfaceHandler
 
   This property provides a way to override the default subsurface behavior.
 
@@ -835,7 +835,7 @@ void QWaylandQuickItem::setAllowDiscardFrontBuffer(bool discard)
 }
 
 /*!
- * \qmlmethod QtWaylandCompositor::WaylandQuickItem::setPrimary
+ * \qmlmethod WaylandQuickItem::setPrimary()
  *
  * Makes this WaylandQuickItem the primary view for the surface.
  */

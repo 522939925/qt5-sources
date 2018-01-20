@@ -816,7 +816,8 @@ static const PluginModuleMapping pluginModuleMappings[] =
     {"texttospeech", QtTextToSpeechModule},
     {"qtwebengine", QtWebEngineModule | QtWebEngineCoreModule | QtWebEngineWidgetsModule},
     {"sceneparsers", Qt3DRendererModule},
-    {"renderplugins", Qt3DRendererModule}
+    {"renderplugins", Qt3DRendererModule},
+    {"geometryloaders", Qt3DRendererModule}
 };
 
 static inline quint64 qtModuleForPlugin(const QString &subDirName)
@@ -914,9 +915,12 @@ QStringList findQtPlugins(quint64 *usedQtModules, quint64 disabledQtModules,
                     std::wcerr << "Warning: Cannot determine dependencies of "
                         << QDir::toNativeSeparators(pluginPath) << ": " << errorMessage << '\n';
                 }
-                if (neededModules & disabledQtModules) {
-                    if (optVerboseLevel)
-                        std::wcout << "Skipping plugin " << plugin << " due to disabled dependencies.\n";
+                if (const quint64 missingModules = neededModules & disabledQtModules) {
+                    if (optVerboseLevel) {
+                        std::wcout << "Skipping plugin " << plugin
+                            << " due to disabled dependencies ("
+                            << formatQtModules(missingModules).constData() << ").\n";
+                    }
                 } else {
                     if (const quint64 missingModules = (neededModules & ~*usedQtModules)) {
                         *usedQtModules |= missingModules;
@@ -1044,7 +1048,10 @@ static QString vcRedistDir()
     const QFileInfoList subDirs =
         QDir(vc2017RedistDirName).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed);
     for (const QFileInfo &f : subDirs) {
-        const QString path = f.absoluteFilePath();
+        QString path = f.absoluteFilePath();
+        if (QFileInfo(path + slash + vcDebugRedistDir()).isDir())
+            return path;
+        path += QStringLiteral("/onecore");
         if (QFileInfo(path + slash + vcDebugRedistDir()).isDir())
             return path;
     }
@@ -1543,6 +1550,7 @@ static bool deployWebEngineCore(const QMap<QString, QString> &qmakeVariables,
                                 const Options &options, bool isDebug, QString *errorMessage)
 {
     static const char *installDataFiles[] = {"icudtl.dat",
+                                             "qtwebengine_devtools_resources.pak",
                                              "qtwebengine_resources.pak",
                                              "qtwebengine_resources_100p.pak",
                                              "qtwebengine_resources_200p.pak"};
@@ -1570,13 +1578,29 @@ static bool deployWebEngineCore(const QMap<QString, QString> &qmakeVariables,
                                  + QStringLiteral("/qtwebengine_locales"));
     if (!translations.isDir()) {
         std::wcerr << "Warning: Cannot find the translation files of the QtWebEngine module at "
-            << QDir::toNativeSeparators(translations.absoluteFilePath()) << '.';
+            << QDir::toNativeSeparators(translations.absoluteFilePath()) << ".\n";
         return true;
     }
-    // Missing translations may cause crashes, ignore --no-translations.
-    return createDirectory(options.translationsDirectory, errorMessage)
-        && updateFile(translations.absoluteFilePath(), options.translationsDirectory,
-                      options.updateFileFlags, options.json, errorMessage);
+    if (options.translations) {
+        // Copy the whole translations directory.
+        return createDirectory(options.translationsDirectory, errorMessage)
+                && updateFile(translations.absoluteFilePath(), options.translationsDirectory,
+                              options.updateFileFlags, options.json, errorMessage);
+    } else {
+        // Translations have been turned off, but QtWebEngine needs at least one.
+        const QFileInfo enUSpak(translations.filePath() + QStringLiteral("/en-US.pak"));
+        if (!enUSpak.exists()) {
+            std::wcerr << "Warning: Cannot find "
+                       << QDir::toNativeSeparators(enUSpak.absoluteFilePath()) << ".\n";
+            return true;
+        }
+        const QString webEngineTranslationsDir = options.translationsDirectory + QLatin1Char('/')
+                + translations.fileName();
+        if (!createDirectory(webEngineTranslationsDir, errorMessage))
+            return false;
+        return updateFile(enUSpak.absoluteFilePath(), webEngineTranslationsDir,
+                          options.updateFileFlags, options.json, errorMessage);
+    }
 }
 
 int main(int argc, char **argv)

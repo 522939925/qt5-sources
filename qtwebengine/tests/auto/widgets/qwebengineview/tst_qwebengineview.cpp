@@ -447,16 +447,25 @@ void tst_QWebEngineView::unhandledKeyEventPropagation()
     QTRY_COMPARE(parentWidget.releaseEvents.size(), 3);
     QCOMPARE(evaluateJavaScriptSync(webView.page(), "document.activeElement.id").toString(), QStringLiteral("second_div"));
 
+    // Focus the button and press 'y'.
+    evaluateJavaScriptSync(webView.page(), "document.getElementById('submit_button').focus()");
+    QTRY_COMPARE(evaluateJavaScriptSync(webView.page(), "document.activeElement.id").toString(), QStringLiteral("submit_button"));
+    QTest::sendKeyEvent(QTest::Press, webView.focusProxy(), Qt::Key_Y, 'y', Qt::NoModifier);
+    QTest::sendKeyEvent(QTest::Release, webView.focusProxy(), Qt::Key_Y, 'y', Qt::NoModifier);
+    QTRY_COMPARE(parentWidget.releaseEvents.size(), 4);
+
     // The page will consume the Tab key to change focus between elements while the arrow
     // keys won't be used.
-    QCOMPARE(parentWidget.pressEvents.size(), 2);
+    QCOMPARE(parentWidget.pressEvents.size(), 3);
     QCOMPARE(parentWidget.pressEvents[0].key(), (int)Qt::Key_Right);
     QCOMPARE(parentWidget.pressEvents[1].key(), (int)Qt::Key_Left);
+    QCOMPARE(parentWidget.pressEvents[2].key(), (int)Qt::Key_Y);
 
     // Key releases will all come back unconsumed.
     QCOMPARE(parentWidget.releaseEvents[0].key(), (int)Qt::Key_Right);
     QCOMPARE(parentWidget.releaseEvents[1].key(), (int)Qt::Key_Tab);
     QCOMPARE(parentWidget.releaseEvents[2].key(), (int)Qt::Key_Left);
+    QCOMPARE(parentWidget.releaseEvents[3].key(), (int)Qt::Key_Y);
 }
 
 void tst_QWebEngineView::horizontalScrollbarTest()
@@ -1800,12 +1809,36 @@ void tst_QWebEngineView::emptyInputMethodEvent()
     QEXPECT_FAIL("", "https://bugreports.qt.io/browse/QTBUG-53134", Continue);
     QCOMPARE(selectionChangedSpy.count(), 1);
 
-    // Send empty QInputMethodEvent
+    // 1. Empty input method event does not clear text
     QInputMethodEvent emptyEvent;
     QApplication::sendEvent(view.focusProxy(), &emptyEvent);
 
     QString inputValue = evaluateJavaScriptSync(view.page(), "document.getElementById('input1').value").toString();
-    QCOMPARE(inputValue, QString("QtWebEngine"));
+    QTRY_COMPARE(inputValue, QStringLiteral("QtWebEngine"));
+    QTRY_COMPARE(view.focusProxy()->inputMethodQuery(Qt::ImSurroundingText).toString(), QStringLiteral("QtWebEngine"));
+
+    // Reset: clear input field
+    evaluateJavaScriptSync(view.page(), "var inputEle = document.getElementById('input1').value = ''");
+    QTRY_VERIFY(evaluateJavaScriptSync(view.page(), "document.getElementById('input1').value").toString().isEmpty());
+    QTRY_VERIFY(view.focusProxy()->inputMethodQuery(Qt::ImSurroundingText).toString().isEmpty());
+
+    // 2. Cancel IME composition with empty input method event
+    // Start IME composition
+    QList<QInputMethodEvent::Attribute> attributes;
+    QInputMethodEvent eventComposition("a", attributes);
+    QApplication::sendEvent(view.focusProxy(), &eventComposition);
+    QTRY_COMPARE(evaluateJavaScriptSync(view.page(), "document.getElementById('input1').value").toString(), QStringLiteral("a"));
+    QTRY_VERIFY(view.focusProxy()->inputMethodQuery(Qt::ImSurroundingText).toString().isEmpty());
+
+    // Cancel IME composition
+    QApplication::sendEvent(view.focusProxy(), &emptyEvent);
+    QTRY_VERIFY(evaluateJavaScriptSync(view.page(), "document.getElementById('input1').value").toString().isEmpty());
+    QTRY_VERIFY(view.focusProxy()->inputMethodQuery(Qt::ImSurroundingText).toString().isEmpty());
+
+    // Try key press after cancelled IME composition
+    QTest::keyClick(view.focusProxy(), Qt::Key_B);
+    QTRY_COMPARE(evaluateJavaScriptSync(view.page(), "document.getElementById('input1').value").toString(), QStringLiteral("b"));
+    QTRY_COMPARE(view.focusProxy()->inputMethodQuery(Qt::ImSurroundingText).toString(), QStringLiteral("b"));
 }
 
 void tst_QWebEngineView::imeComposition()
@@ -2119,14 +2152,16 @@ void tst_QWebEngineView::imeCompositionQueryEvent()
     QObject *input = nullptr;
 
     QFETCH(QString, receiverObjectName);
-    if (receiverObjectName == "focusObject")
+    if (receiverObjectName == "focusObject") {
+        QTRY_VERIFY(qApp->focusObject());
         input = qApp->focusObject();
-    else if (receiverObjectName == "focusProxy")
+    } else if (receiverObjectName == "focusProxy") {
+        QTRY_VERIFY(view.focusProxy());
         input = view.focusProxy();
-    else if (receiverObjectName == "focusWidget")
+    } else if (receiverObjectName == "focusWidget") {
+        QTRY_VERIFY(view.focusWidget());
         input = view.focusWidget();
-
-    QVERIFY(input);
+    }
 
     QInputMethodQueryEvent srrndTextQuery(Qt::ImSurroundingText);
     QInputMethodQueryEvent cursorPosQuery(Qt::ImCursorPosition);

@@ -40,6 +40,7 @@
 
 #include <QtGui/qstylehints.h>
 #include <QtGui/private/qguiapplication_p.h>
+#include <QtQml/qqmlinfo.h>
 #include <QtQuick/private/qquickwindow_p.h>
 #include <QtQuick/private/qquickanimation_p.h>
 #include <QtQuick/private/qquicktransition_p.h>
@@ -245,7 +246,7 @@ void QQuickDrawerPrivate::resizeOverlay()
     dimmer->setSize(geometry.size());
 }
 
-static bool isWithinDragMargin(QQuickDrawer *drawer, const QPointF &pos)
+static bool isWithinDragMargin(const QQuickDrawer *drawer, const QPointF &pos)
 {
     switch (drawer->edge()) {
     case Qt::LeftEdge:
@@ -346,10 +347,10 @@ bool QQuickDrawerPrivate::grabMouse(QQuickItem *item, QMouseEvent *event)
 bool QQuickDrawerPrivate::grabTouch(QQuickItem *item, QTouchEvent *event)
 {
     Q_Q(QQuickDrawer);
-    handleTouchEvent(item, event);
+    bool handled = handleTouchEvent(item, event);
 
     if (!window || !interactive || popupItem->keepTouchGrab() || !event->touchPointStates().testFlag(Qt::TouchPointMoved))
-        return false;
+        return handled;
 
     bool overThreshold = false;
     for (const QTouchEvent::TouchPoint &point : event->touchPoints()) {
@@ -392,6 +393,30 @@ bool QQuickDrawerPrivate::grabTouch(QQuickItem *item, QTouchEvent *event)
 
 static const qreal openCloseVelocityThreshold = 300;
 
+bool QQuickDrawerPrivate::blockInput(QQuickItem *item, const QPointF &point) const
+{
+    Q_Q(const QQuickDrawer);
+
+    // We want all events, if mouse/touch is already grabbed.
+    if (popupItem->keepMouseGrab() || popupItem->keepTouchGrab())
+        return true;
+
+    // Don't block input to drawer's children/content.
+    if (popupItem->isAncestorOf(item))
+        return false;
+
+    // Don't block outside a drawer's background dimming
+    if (dimmer && !dimmer->contains(dimmer->mapFromScene(point)))
+        return false;
+
+    // Accept all events within drag area.
+    if (isWithinDragMargin(q, point))
+        return true;
+
+    // Accept all other events if drawer is modal.
+    return modal;
+}
+
 bool QQuickDrawerPrivate::handlePress(QQuickItem *item, const QPointF &point, ulong timestamp)
 {
     offset = 0;
@@ -410,7 +435,7 @@ bool QQuickDrawerPrivate::handleMove(QQuickItem *item, const QPointF &point, ulo
         return false;
 
     // limit/reset the offset to the edge of the drawer when pushed from the outside
-    if (qFuzzyCompare(position, 1.0) && !contains(point))
+    if (qFuzzyCompare(position, qreal(1.0)) && !contains(point))
         offset = 0;
 
     bool isGrabbed = popupItem->keepMouseGrab() || popupItem->keepTouchGrab();
@@ -530,20 +555,32 @@ bool QQuickDrawerPrivate::prepareExitTransition()
     return QQuickPopupPrivate::prepareExitTransition();
 }
 
-void QQuickDrawerPrivate::setEdge(Qt::Edge e)
+bool QQuickDrawerPrivate::setEdge(Qt::Edge e)
 {
-    edge = e;
-    if (edge == Qt::LeftEdge || edge == Qt::RightEdge) {
+    Q_Q(QQuickDrawer);
+    switch (e) {
+    case Qt::LeftEdge:
+    case Qt::RightEdge:
         allowVerticalMove = true;
         allowVerticalResize = true;
         allowHorizontalMove = false;
         allowHorizontalResize = false;
-    } else {
+        break;
+    case Qt::TopEdge:
+    case Qt::BottomEdge:
         allowVerticalMove = false;
         allowVerticalResize = false;
         allowHorizontalMove = true;
         allowHorizontalResize = true;
+        break;
+    default:
+        qmlWarning(q) << "invalid edge value - valid values are: "
+            << "Qt.TopEdge, Qt.LeftEdge, Qt.RightEdge, Qt.BottomEdge";
+        return false;
     }
+
+    edge = e;
+    return true;
 }
 
 QQuickDrawer::QQuickDrawer(QObject *parent)
@@ -578,7 +615,9 @@ void QQuickDrawer::setEdge(Qt::Edge edge)
     if (d->edge == edge)
         return;
 
-    d->setEdge(edge);
+    if (!d->setEdge(edge))
+        return;
+
     if (isComponentComplete())
         d->reposition();
     emit edgeChanged();

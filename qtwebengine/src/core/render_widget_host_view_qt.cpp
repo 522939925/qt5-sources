@@ -80,6 +80,7 @@
 #include <QFocusEvent>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
+#include <QLoggingCategory>
 #include <QTextFormat>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -941,11 +942,11 @@ bool RenderWidgetHostViewQt::forwardEvent(QEvent *event)
     case QEvent::TouchCancel:
         handleTouchEvent(static_cast<QTouchEvent*>(event));
         break;
+#ifndef QT_NO_GESTURES
     case QEvent::NativeGesture:
         handleGestureEvent(static_cast<QNativeGestureEvent *>(event));
         break;
-    case QEvent::HoverEnter:
-    case QEvent::HoverLeave:
+#endif // QT_NO_GESTURES
     case QEvent::HoverMove:
         handleHoverEvent(static_cast<QHoverEvent*>(event));
         break;
@@ -973,10 +974,17 @@ QVariant RenderWidgetHostViewQt::inputMethodQuery(Qt::InputMethodQuery query)
     case Qt::ImFont:
         // TODO: Implement this
         return QVariant();
-    case Qt::ImCursorRectangle:
-        if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
-            return QVariant();
-        return toQt(text_input_manager_->GetSelectionRegion()->caret_rect);
+    case Qt::ImCursorRectangle: {
+        if (text_input_manager_) {
+            if (auto *region = text_input_manager_->GetSelectionRegion()) {
+                gfx::Rect caretRect = gfx::RectBetweenSelectionBounds(region->anchor, region->focus);
+                if (caretRect.width() == 0)
+                    caretRect.set_width(1); // IME API on Windows expects a width > 0
+                return toQt(caretRect);
+            }
+        }
+        return QVariant();
+    }
     case Qt::ImCursorPosition:
         return m_cursorPosition;
     case Qt::ImAnchorPosition:
@@ -1138,8 +1146,9 @@ void RenderWidgetHostViewQt::handleKeyEvent(QKeyEvent *ev)
 
     if (keyDownTextInsertion) {
         // Blink won't consume the RawKeyDown, but rather the Char event in this case.
-        // Make sure to skip the former on the way back. The same os_event will be set on both of them.
-        webEvent.skip_in_browser = true;
+        // The RawKeyDown is skipped on the way back (see above).
+        // The same os_event will be set on both NativeWebKeyboardEvents.
+        webEvent.skip_in_browser = false;
         webEvent.type = blink::WebInputEvent::Char;
         m_host->ForwardKeyboardEvent(webEvent);
     }
@@ -1283,7 +1292,6 @@ void RenderWidgetHostViewQt::handleInputMethodEvent(QInputMethodEvent *ev)
         // to the same focused object, and cancelling the composition on the next event loop tick.
         if (!m_receivedEmptyImeText && m_imeInProgress && !hasSelection) {
             m_receivedEmptyImeText = true;
-            m_imeInProgress = false;
             QInputMethodEvent *eventCopy = new QInputMethodEvent(*ev);
             QGuiApplication::postEvent(qApp->focusObject(), eventCopy);
         } else {
@@ -1330,6 +1338,7 @@ void RenderWidgetHostViewQt::clearPreviousTouchMotionState()
     m_touchMotionStarted = false;
 }
 
+#ifndef QT_NO_GESTURES
 void RenderWidgetHostViewQt::handleGestureEvent(QNativeGestureEvent *ev)
 {
     const Qt::NativeGestureType type = ev->gestureType();
@@ -1340,12 +1349,22 @@ void RenderWidgetHostViewQt::handleGestureEvent(QNativeGestureEvent *ev)
                                         static_cast<double>(dpiScale())));
     }
 }
+#endif
+
+Q_DECLARE_LOGGING_CATEGORY(QWEBENGINE_TOUCH_HANDLING);
+Q_LOGGING_CATEGORY(QWEBENGINE_TOUCH_HANDLING, "qt.webengine.touch");
 
 void RenderWidgetHostViewQt::handleTouchEvent(QTouchEvent *ev)
 {
     // On macOS instead of handling touch events, we use the OS provided QNativeGestureEvents.
 #ifdef Q_OS_MACOS
-    return;
+    if (ev->spontaneous()) {
+        return;
+    } else {
+        qCWarning(QWEBENGINE_TOUCH_HANDLING)
+            << "Sending simulated touch events to Chromium does not work properly on macOS. "
+               "Consider using QNativeGestureEvents or QMouseEvents.";
+    }
 #endif
 
     // Chromium expects the touch event timestamps to be comparable to base::TimeTicks::Now().
@@ -1393,6 +1412,19 @@ void RenderWidgetHostViewQt::handleTouchEvent(QTouchEvent *ev)
         break;
     default:
         break;
+    }
+
+    if (m_imeInProgress && ev->type() == QEvent::TouchBegin) {
+        m_imeInProgress = false;
+        // Tell input method to commit the pre-edit string entered so far, and finish the
+        // composition operation.
+#ifdef Q_OS_WIN
+        // Yes the function name is counter-intuitive, but commit isn't actually implemented
+        // by the Windows QPA, and reset does exactly what is necessary in this case.
+        qApp->inputMethod()->reset();
+#else
+        qApp->inputMethod()->commit();
+#endif
     }
 
     // Make sure that ACTION_POINTER_DOWN is delivered before ACTION_MOVE,

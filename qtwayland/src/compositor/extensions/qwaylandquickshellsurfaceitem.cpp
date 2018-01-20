@@ -47,6 +47,7 @@ QT_BEGIN_NAMESPACE
 
 /*!
  * \qmltype ShellSurfaceItem
+ * \inherits WaylandQuickItem
  * \inqmlmodule QtWayland.Compositor
  * \since 5.8
  * \brief A Qt Quick item type representing a WlShellSurface.
@@ -88,18 +89,17 @@ QWaylandQuickShellSurfaceItem::QWaylandQuickShellSurfaceItem(QWaylandQuickShellS
 /*!
  * \qmlproperty object QtWaylandCompositor::ShellSurfaceItem::shellSurface
  *
- * This property holds the shell surface rendered by this ShellSurfaceItem.
- * It may either be an XdgSurface or a WlShellSurface depending on which
- * shell protocol is in use.
+ * This property holds the ShellSurface rendered by this ShellSurfaceItem.
+ * It may either be an XdgSurfaceV5, WlShellSurface or IviSurface depending on which shell protocol
+ * is in use.
  */
 
 /*!
  * \property QWaylandQuickShellSurfaceItem::shellSurface
  *
- * This property holds the shell surface rendered by this
- * QWaylandQuickShellSurfaceItem. It may either be a QWaylandXdgSurface or a
- * QWaylandWlShellSurface depending on which shell protocol is in use.
- *
+ * This property holds the QWaylandShellSurface rendered by this QWaylandQuickShellSurfaceItem.
+ * It may either be a QWaylandXdgSurfaceV5, QWaylandWlShellSurface or QWaylandIviSurface depending
+ * on which shell protocol is in use.
  */
 QWaylandShellSurface *QWaylandQuickShellSurfaceItem::shellSurface() const
 {
@@ -127,9 +127,19 @@ void QWaylandQuickShellSurfaceItem::setShellSurface(QWaylandShellSurface *shellS
 }
 
 /*!
+ * \qmlproperty Item QtWaylandCompositor::ShellSurfaceItem::moveItem
+ *
+ * This property holds the move item for this ShellSurfaceItem. This is the item that will be moved
+ * when the clients request the ShellSurface to be moved, maximized, resized etc. This property is
+ * useful when implementing server-side decorations.
+ */
+
+/*!
  * \property QWaylandQuickShellSurfaceItem::moveItem
  *
- * This property holds the move item for this QWaylandQuickShellSurfaceItem.
+ * This property holds the move item for this QWaylandQuickShellSurfaceItem. This is the item that
+ * will be moved when the clients request the QWaylandShellSurface to be moved, maximized, resized
+ * etc. This property is useful when implementing server-side decorations.
  */
 QQuickItem *QWaylandQuickShellSurfaceItem::moveItem() const
 {

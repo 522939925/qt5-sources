@@ -80,11 +80,9 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
-#if defined(QT_PRINTSUPPORT_LIB)
-#ifndef QT_NO_PRINTER
+#ifdef ENABLE_PRINTING
 #include <QPrinter>
-#endif //QT_NO_PRINTER
-#endif //QT_PRINTSUPPORT_LIB
+#endif
 #include <QStandardPaths>
 #include <QStyle>
 #include <QTimer>
@@ -1244,7 +1242,9 @@ void QWebEnginePage::triggerAction(WebAction action, bool)
         break;
     case DownloadLinkToDisk:
         if (menuData.linkUrl().isValid())
-            d->adapter->download(menuData.linkUrl(), menuData.suggestedFileName());
+            d->adapter->download(menuData.linkUrl(), menuData.suggestedFileName(),
+                                 menuData.referrerUrl(), menuData.referrerPolicy());
+
         break;
     case CopyImageToClipboard:
         if (menuData.hasImageContent() &&
@@ -1271,7 +1271,8 @@ void QWebEnginePage::triggerAction(WebAction action, bool)
     case DownloadImageToDisk:
     case DownloadMediaToDisk:
         if (menuData.mediaUrl().isValid())
-            d->adapter->download(menuData.mediaUrl(), menuData.suggestedFileName());
+            d->adapter->download(menuData.mediaUrl(), menuData.suggestedFileName(),
+                                 menuData.referrerUrl(), menuData.referrerPolicy());
         break;
     case CopyMediaUrlToClipboard:
         if (menuData.mediaUrl().isValid() &&
@@ -1399,7 +1400,7 @@ void QWebEnginePagePrivate::wasHidden()
 
 bool QWebEnginePagePrivate::contextMenuRequested(const WebEngineContextMenuData &data)
 {
-    if (!view || !view->d_func()->m_pendingContextMenuEvent)
+    if (!view)
         return false;
 
     contextData.reset();
@@ -1425,7 +1426,6 @@ bool QWebEnginePagePrivate::contextMenuRequested(const WebEngineContextMenuData 
         event.ignore();
         return false;
     }
-    view->d_func()->m_pendingContextMenuEvent = false;
     return true;
 }
 
@@ -1433,6 +1433,8 @@ void QWebEnginePagePrivate::navigationRequested(int navigationType, const QUrl &
 {
     Q_Q(QWebEnginePage);
     bool accepted = q->acceptNavigationRequest(url, static_cast<QWebEnginePage::NavigationType>(navigationType), isMainFrame);
+    if (accepted && adapter)
+        adapter->stopFinding();
     navigationRequestAction = accepted ? WebContentsAdapterClient::AcceptRequest : WebContentsAdapterClient::IgnoreRequest;
 }
 
@@ -2051,8 +2053,6 @@ void QWebEnginePage::printToPdf(const QWebEngineCallback<const QByteArray&> &res
 #endif // if defined(ENABLE_PDF)
 }
 
-#if defined(QT_PRINTSUPPORT_LIB)
-#ifndef QT_NO_PRINTER
 /*!
     \fn void QWebEnginePage::print(QPrinter *printer, FunctorOrLambda resultCallback)
     Renders the current content of the page into a temporary PDF document, then prints it using \a printer.
@@ -2089,8 +2089,6 @@ void QWebEnginePage::print(QPrinter *printer, const QWebEngineCallback<bool> &re
     d->m_callbacks.invokeDirectly(resultCallback, false);
 #endif // if defined(ENABLE_PDF)
 }
-#endif // if defined(QT_NO_PRINTER)
-#endif // if defined(QT_PRINTSUPPORT_LIB)
 
 /*!
     \since 5.7
