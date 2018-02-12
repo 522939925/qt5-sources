@@ -622,7 +622,7 @@ protected:
         Q_ASSERT(!client.isNull());
         // we need to emulate the bytesWrittenSlot call if the data is empty.
         if (dataToTransmit.size() == 0) {
-            QMetaObject::invokeMethod(this, "bytesWrittenSlot", Qt::QueuedConnection);
+            emit client->bytesWritten(0);
         } else {
             client->write(dataToTransmit);
             // FIXME: For SSL connections, if we don't flush the socket, the
@@ -659,22 +659,26 @@ private slots:
 #ifndef QT_NO_SSL
     void slotSslErrors(const QList<QSslError>& errors)
     {
-        Q_ASSERT(!client.isNull());
-        qDebug() << "slotSslErrors" << client->errorString() << errors;
+        QTcpSocket *currentClient = qobject_cast<QTcpSocket *>(sender());
+        Q_ASSERT(currentClient);
+        qDebug() << "slotSslErrors" << currentClient->errorString() << errors;
     }
 #endif
     void slotError(QAbstractSocket::SocketError err)
     {
-        if (client.isNull())
-            qDebug() << "slotError" << err;
-        else
-            qDebug() << "slotError" << err << client->errorString();
+        QTcpSocket *currentClient = qobject_cast<QTcpSocket *>(sender());
+        Q_ASSERT(currentClient);
+        qDebug() << "slotError" << err << currentClient->errorString();
     }
 
 public slots:
     void readyReadSlot()
     {
-        Q_ASSERT(!client.isNull());
+        QTcpSocket *currentClient = qobject_cast<QTcpSocket *>(sender());
+        Q_ASSERT(currentClient);
+        if (currentClient != client)
+            client = currentClient;
+
         receivedData += client->readAll();
         const int doubleEndlPos = receivedData.indexOf("\r\n\r\n");
 
@@ -6766,9 +6770,9 @@ void tst_QNetworkReply::getFromUnreachableIp()
 {
     QNetworkAccessManager manager;
 
-#ifdef Q_OS_WIN32
+#ifdef Q_OS_WIN
     // This test assumes that attempt to connect to 255.255.255.255 fails more
-    // or less fast/immediately. This is not what we observe on Windows x86:
+    // or less fast/immediately. This is not what we observe on Windows:
     // WSAConnect on non-blocking socket returns SOCKET_ERROR, WSAGetLastError
     // returns WSAEWOULDBLOCK (expected) and getsockopt most of the time returns
     // NOERROR; so socket engine starts a timer (30 s.) and waits for a timeout/
@@ -6806,7 +6810,7 @@ void tst_QNetworkReply::getFromUnreachableIp()
 #else // bearermanagement
     QSKIP("This test is non-deterministic on Windows x86");
 #endif // !bearermanagement
-#endif // Q_OS_WIN32
+#endif // Q_OS_WIN
 
     QNetworkRequest request(QUrl("http://255.255.255.255/42/23/narf/narf/narf"));
     QNetworkReplyPtr reply(manager.get(request));
@@ -8290,11 +8294,23 @@ void tst_QNetworkReply::ioHttpRedirectErrors()
     QNetworkReplyPtr reply(manager.get(request));
     if (localhost.scheme() == "https")
         reply.data()->ignoreSslErrors();
-    QSignalSpy spy(reply.data(), SIGNAL(error(QNetworkReply::NetworkError)));
 
-    QCOMPARE(waitForFinish(reply), int(Failure));
+    QEventLoop eventLoop;
+    QTimer watchDog;
+    watchDog.setSingleShot(true);
 
-    QCOMPARE(spy.count(), 1);
+    reply->connect(reply.data(), QOverload<QNetworkReply::NetworkError>().of(&QNetworkReply::error),
+                   [&eventLoop](QNetworkReply::NetworkError){
+                        eventLoop.exit(Failure);
+                   });
+
+    watchDog.connect(&watchDog, &QTimer::timeout, [&eventLoop](){
+                        eventLoop.exit(Timeout);
+                    });
+
+    watchDog.start(5000);
+
+    QCOMPARE(eventLoop.exec(), int(Failure));
     QCOMPARE(reply->error(), error);
 }
 

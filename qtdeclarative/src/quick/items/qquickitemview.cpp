@@ -1729,7 +1729,7 @@ void QQuickItemViewPrivate::updateCurrent(int modelIndex)
     FxViewItem *oldCurrentItem = currentItem;
     int oldCurrentIndex = currentIndex;
     currentIndex = modelIndex;
-    currentItem = createItem(modelIndex, false);
+    currentItem = createItem(modelIndex, QQmlIncubator::AsynchronousIfNested);
     if (oldCurrentItem && oldCurrentItem->attached && (!currentItem || oldCurrentItem->item != currentItem->item))
         oldCurrentItem->attached->setIsCurrentItem(false);
     if (currentItem) {
@@ -1751,6 +1751,7 @@ void QQuickItemViewPrivate::updateCurrent(int modelIndex)
 void QQuickItemViewPrivate::clear()
 {
     currentChanges.reset();
+    bufferedChanges.reset();
     timeline.clear();
 
     releaseVisibleItems();
@@ -1808,51 +1809,56 @@ void QQuickItemViewPrivate::refill(qreal from, qreal to)
     if (!isValid() || !q->isComponentComplete())
         return;
 
-    bufferPause.stop();
-    currentChanges.reset();
-
-    int prevCount = itemCount;
-    itemCount = model->count();
-    qreal bufferFrom = from - buffer;
-    qreal bufferTo = to + buffer;
-    qreal fillFrom = from;
-    qreal fillTo = to;
-
-    bool added = addVisibleItems(fillFrom, fillTo, bufferFrom, bufferTo, false);
-    bool removed = removeNonVisibleItems(bufferFrom, bufferTo);
-
-    if (requestedIndex == -1 && buffer && bufferMode != NoBuffer) {
-        if (added) {
-            // We've already created a new delegate this frame.
-            // Just schedule a buffer refill.
-            bufferPause.start();
-        } else {
-            if (bufferMode & BufferAfter)
-                fillTo = bufferTo;
-            if (bufferMode & BufferBefore)
-                fillFrom = bufferFrom;
-            added |= addVisibleItems(fillFrom, fillTo, bufferFrom, bufferTo, true);
+    do {
+        bufferPause.stop();
+        if (currentChanges.hasPendingChanges() || bufferedChanges.hasPendingChanges()) {
+            currentChanges.reset();
+            bufferedChanges.reset();
+            releaseVisibleItems();
         }
-    }
 
-    if (added || removed) {
-        markExtentsDirty();
-        updateBeginningEnd();
-        visibleItemsChanged();
-        updateHeader();
-        updateFooter();
-        updateViewport();
-    }
+        int prevCount = itemCount;
+        itemCount = model->count();
+        qreal bufferFrom = from - buffer;
+        qreal bufferTo = to + buffer;
+        qreal fillFrom = from;
+        qreal fillTo = to;
 
-    if (prevCount != itemCount)
-        emit q->countChanged();
+        bool added = addVisibleItems(fillFrom, fillTo, bufferFrom, bufferTo, false);
+        bool removed = removeNonVisibleItems(bufferFrom, bufferTo);
+
+        if (requestedIndex == -1 && buffer && bufferMode != NoBuffer) {
+            if (added) {
+                // We've already created a new delegate this frame.
+                // Just schedule a buffer refill.
+                bufferPause.start();
+            } else {
+                if (bufferMode & BufferAfter)
+                    fillTo = bufferTo;
+                if (bufferMode & BufferBefore)
+                    fillFrom = bufferFrom;
+                added |= addVisibleItems(fillFrom, fillTo, bufferFrom, bufferTo, true);
+            }
+        }
+
+        if (added || removed) {
+            markExtentsDirty();
+            updateBeginningEnd();
+            visibleItemsChanged();
+            updateHeader();
+            updateFooter();
+            updateViewport();
+        }
+
+        if (prevCount != itemCount)
+            emit q->countChanged();
+    } while (currentChanges.hasPendingChanges() || bufferedChanges.hasPendingChanges());
 }
 
 void QQuickItemViewPrivate::regenerate(bool orientationChanged)
 {
     Q_Q(QQuickItemView);
     if (q->isComponentComplete()) {
-        currentChanges.reset();
         if (orientationChanged) {
             delete header;
             header = 0;
@@ -2325,11 +2331,11 @@ void QQuickItemViewPrivate::viewItemTransitionFinished(QQuickItemViewTransitiona
   When the item becomes available, refill() will be called and the item
   will be returned on the next call to createItem().
 */
-FxViewItem *QQuickItemViewPrivate::createItem(int modelIndex, bool asynchronous)
+FxViewItem *QQuickItemViewPrivate::createItem(int modelIndex, QQmlIncubator::IncubationMode incubationMode)
 {
     Q_Q(QQuickItemView);
 
-    if (requestedIndex == modelIndex && asynchronous)
+    if (requestedIndex == modelIndex && incubationMode == QQmlIncubator::Asynchronous)
         return 0;
 
     for (int i=0; i<releasePendingTransition.count(); i++) {
@@ -2340,14 +2346,20 @@ FxViewItem *QQuickItemViewPrivate::createItem(int modelIndex, bool asynchronous)
         }
     }
 
-    if (asynchronous)
-        requestedIndex = modelIndex;
     inRequest = true;
 
-    QObject* object = model->object(modelIndex, asynchronous);
+    QObject* object = model->object(modelIndex, incubationMode);
     QQuickItem *item = qmlobject_cast<QQuickItem*>(object);
+
     if (!item) {
-        if (object) {
+        if (!object) {
+            if (requestedIndex == -1 && model->incubationStatus(modelIndex) == QQmlIncubator::Loading) {
+                // The reason we didn't receive an item is because it's incubating async. We keep track
+                // of this by assigning the index we're waiting for to 'requestedIndex'. This will e.g. let
+                // the view avoid unnecessary layout calls until the item has been loaded.
+                requestedIndex = modelIndex;
+            }
+        } else {
             model->release(object);
             if (!delegateValidated) {
                 delegateValidated = true;

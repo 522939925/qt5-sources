@@ -153,18 +153,17 @@ class CPWL_MsgControl : public CFX_Observable<CPWL_MsgControl> {
 
   void SetFocus(CPWL_Wnd* pWnd) {
     m_aKeyboardPath.RemoveAll();
+    if (!pWnd)
+      return;
 
-    if (pWnd) {
-      m_pMainKeyboardWnd = pWnd;
-
-      CPWL_Wnd* pParent = pWnd;
-      while (pParent) {
+    m_pMainKeyboardWnd = pWnd;
+    CPWL_Wnd* pParent = pWnd;
+    while (pParent) {
         m_aKeyboardPath.Add(pParent);
         pParent = pParent->GetParentWindow();
-      }
-
-      pWnd->OnSetFocus();
     }
+    // Note, pWnd may get destroyed in the OnSetFocus call.
+    pWnd->OnSetFocus();
   }
 
   void KillFocus() {
@@ -250,7 +249,9 @@ void CPWL_Wnd::Create(const PWL_CREATEPARAM& cp) {
 
     OnCreated();
 
-    RePosChildWnd();
+    if (!RePosChildWnd())
+      return;
+
     m_bCreated = true;
   }
 }
@@ -278,7 +279,8 @@ void CPWL_Wnd::Destroy() {
 
   if (m_bCreated) {
     for (int32_t i = m_aChildren.GetSize() - 1; i >= 0; i--) {
-      if (CPWL_Wnd* pChild = m_aChildren[i]) {
+      CPWL_Wnd* pChild = m_aChildren[i];
+      if (pChild) {
         pChild->Destroy();
         delete pChild;
         pChild = nullptr;
@@ -297,7 +299,7 @@ void CPWL_Wnd::Destroy() {
   m_pVScrollBar = nullptr;
 }
 
-void CPWL_Wnd::Move(const CFX_FloatRect& rcNew, bool bReset, bool bRefresh) {
+bool CPWL_Wnd::Move(const CFX_FloatRect& rcNew, bool bReset, bool bRefresh) {
   if (IsValid()) {
     CFX_FloatRect rcOld = GetWindowRect();
 
@@ -307,23 +309,24 @@ void CPWL_Wnd::Move(const CFX_FloatRect& rcNew, bool bReset, bool bRefresh) {
     if (rcOld.left != rcNew.left || rcOld.right != rcNew.right ||
         rcOld.top != rcNew.top || rcOld.bottom != rcNew.bottom) {
       if (bReset) {
-        RePosChildWnd();
+        if (!RePosChildWnd())
+          return false;
       }
     }
-    if (bRefresh) {
-      InvalidateRectMove(rcOld, rcNew);
-    }
+    if (bRefresh && !InvalidateRectMove(rcOld, rcNew))
+      return false;
 
     m_sPrivateParam.rcRectWnd = m_rcWindow;
   }
+  return true;
 }
 
-void CPWL_Wnd::InvalidateRectMove(const CFX_FloatRect& rcOld,
+bool CPWL_Wnd::InvalidateRectMove(const CFX_FloatRect& rcOld,
                                   const CFX_FloatRect& rcNew) {
   CFX_FloatRect rcUnion = rcOld;
   rcUnion.Union(rcNew);
 
-  InvalidateRect(&rcUnion);
+  return InvalidateRect(&rcUnion);
 }
 
 void CPWL_Wnd::GetAppearanceStream(CFX_ByteTextBuf& sAppStream) {
@@ -405,8 +408,9 @@ void CPWL_Wnd::DrawChildAppearance(CFX_RenderDevice* pDevice,
   }
 }
 
-void CPWL_Wnd::InvalidateRect(CFX_FloatRect* pRect) {
+bool CPWL_Wnd::InvalidateRect(CFX_FloatRect* pRect) {
   if (IsValid()) {
+    ObservedPtr thisObserved(this);
     CFX_FloatRect rcRefresh = pRect ? *pRect : GetWindowRect();
 
     if (!HasFlag(PWS_NOREFRESHCLIP)) {
@@ -426,9 +430,12 @@ void CPWL_Wnd::InvalidateRect(CFX_FloatRect* pRect) {
       if (CPDFSDK_Widget* widget = static_cast<CPDFSDK_Widget*>(
               m_sPrivateParam.pAttachedWidget.Get())) {
         pSH->InvalidateRect(widget, rcWin);
+        if (!thisObserved)
+          return false;
       }
     }
   }
+  return true;
 }
 
 #define PWL_IMPLEMENT_KEY_METHOD(key_method_name)                      \
@@ -722,20 +729,27 @@ const CPWL_Wnd* CPWL_Wnd::GetRootWnd() const {
   return this;
 }
 
-void CPWL_Wnd::SetVisible(bool bVisible) {
+bool CPWL_Wnd::SetVisible(bool bVisible) {
   if (IsValid()) {
+    ObservedPtr thisObserved(this);
     for (int32_t i = 0, sz = m_aChildren.GetSize(); i < sz; i++) {
       if (CPWL_Wnd* pChild = m_aChildren.GetAt(i)) {
         pChild->SetVisible(bVisible);
+        if (!thisObserved)
+          return false;
       }
     }
 
     if (bVisible != m_bVisible) {
       m_bVisible = bVisible;
-      RePosChildWnd();
-      InvalidateRect();
+      if (!RePosChildWnd())
+        return false;
+
+      if (!InvalidateRect(nullptr))
+        return false;
     }
   }
+  return true;
 }
 
 void CPWL_Wnd::SetClipRect(const CFX_FloatRect& rect) {
@@ -751,7 +765,7 @@ bool CPWL_Wnd::IsReadOnly() const {
   return HasFlag(PWS_READONLY);
 }
 
-void CPWL_Wnd::RePosChildWnd() {
+bool CPWL_Wnd::RePosChildWnd() {
   CFX_FloatRect rcContent = CPWL_Utils::DeflateRect(
       GetWindowRect(), (FX_FLOAT)(GetBorderWidth() + GetInnerBorderWidth()));
 
@@ -761,8 +775,14 @@ void CPWL_Wnd::RePosChildWnd() {
       CFX_FloatRect(rcContent.right - PWL_SCROLLBAR_WIDTH, rcContent.bottom,
                     rcContent.right - 1.0f, rcContent.top);
 
-  if (pVSB)
+  if (pVSB) {
+    ObservedPtr thisObserved(this);
+
     pVSB->Move(rcVScroll, true, false);
+    if (!thisObserved)
+      return false;
+  }
+  return true;
 }
 
 void CPWL_Wnd::CreateChildWnd(const PWL_CREATEPARAM& cp) {}

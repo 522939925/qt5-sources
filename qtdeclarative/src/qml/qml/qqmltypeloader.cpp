@@ -356,8 +356,10 @@ qreal QQmlDataBlob::progress() const
 }
 
 /*!
-Returns the blob url passed to the constructor.  If a network redirect
-happens while fetching the data, this url remains the same.
+Returns the physical url of the data.  Initially this is the same as
+finalUrl(), but if a network redirect happens while fetching the data, this url
+is updated to reflect the new location. Also, if a URL interceptor is set, it
+will work on this URL and leave finalUrl() alone.
 
 \sa finalUrl()
 */
@@ -366,16 +368,25 @@ QUrl QQmlDataBlob::url() const
     return m_url;
 }
 
-/*!
-Returns the final url of the data.  Initially this is the same as
-url(), but if a network redirect happens while fetching the data, this url
-is updated to reflect the new location.
+QString QQmlDataBlob::urlString() const
+{
+    if (m_urlString.isEmpty())
+        m_urlString = m_url.toString();
 
-May only be called from the load thread, or after the blob isCompleteOrError().
+    return m_urlString;
+}
+
+/*!
+Returns the logical URL to be used for resolving further URLs referred to in
+the code.
+
+This is the blob url passed to the constructor.  If a network redirect
+happens while fetching the data, this url remains the same.
+
+\sa url()
 */
 QUrl QQmlDataBlob::finalUrl() const
 {
-    Q_ASSERT(isCompleteOrError() || (m_typeLoader && m_typeLoader->m_thread->isThisThread()));
     return m_finalUrl;
 }
 
@@ -384,7 +395,6 @@ Returns the finalUrl() as a string.
 */
 QString QQmlDataBlob::finalUrlString() const
 {
-    Q_ASSERT(isCompleteOrError() || (m_typeLoader && m_typeLoader->m_thread->isThisThread()));
     if (m_finalUrlString.isEmpty())
         m_finalUrlString = m_finalUrl.toString();
 
@@ -433,7 +443,7 @@ void QQmlDataBlob::setError(const QList<QQmlError> &errors)
     m_data.setStatus(Error);
 
     if (dumpErrors()) {
-        qWarning().nospace() << "Errors for " << m_finalUrl.toString();
+        qWarning().nospace() << "Errors for " << urlString();
         for (int ii = 0; ii < errors.count(); ++ii)
             qWarning().nospace() << "    " << qPrintable(errors.at(ii).toString());
     }
@@ -472,7 +482,7 @@ void QQmlDataBlob::setError(const QString &description)
 {
     QQmlError e;
     e.setDescription(description);
-    e.setUrl(finalUrl());
+    e.setUrl(url());
     setError(e);
 }
 
@@ -537,7 +547,7 @@ void QQmlDataBlob::networkError(QNetworkReply::NetworkError networkError)
     Q_UNUSED(networkError);
 
     QQmlError error;
-    error.setUrl(m_finalUrl);
+    error.setUrl(m_url);
 
     const char *errorString = 0;
     switch (networkError) {
@@ -654,7 +664,7 @@ void QQmlDataBlob::tryDone()
         addref();
 
 #ifdef DATABLOB_DEBUG
-        qWarning("QQmlDataBlob::done() %s", qPrintable(url().toString()));
+        qWarning("QQmlDataBlob::done() %s", qPrintable(urlString()));
 #endif
         done();
 
@@ -893,7 +903,7 @@ void QQmlTypeLoaderThread::callCompletedMain(QQmlDataBlob *b)
 {
     QML_MEMORY_SCOPE_URL(b->url());
 #ifdef DATABLOB_DEBUG
-    qWarning("QQmlTypeLoaderThread: %s completed() callback", qPrintable(b->url().toString()));
+    qWarning("QQmlTypeLoaderThread: %s completed() callback", qPrintable(b->urlString()));
 #endif
     b->completed();
     b->release();
@@ -903,7 +913,7 @@ void QQmlTypeLoaderThread::callDownloadProgressChangedMain(QQmlDataBlob *b, qrea
 {
 #ifdef DATABLOB_DEBUG
     qWarning("QQmlTypeLoaderThread: %s downloadProgressChanged(%f) callback",
-             qPrintable(b->url().toString()), p);
+             qPrintable(b->urlString()), p);
 #endif
     b->downloadProgressChanged(p);
     b->release();
@@ -1037,7 +1047,7 @@ template<typename Loader>
 void QQmlTypeLoader::doLoad(const Loader &loader, QQmlDataBlob *blob, Mode mode)
 {
 #ifdef DATABLOB_DEBUG
-    qWarning("QQmlTypeLoader::doLoad(%s): %s thread", qPrintable(blob->m_url.toString()),
+    qWarning("QQmlTypeLoader::doLoad(%s): %s thread", qPrintable(blob->urlString()),
              m_thread->isThisThread()?"Compile":"Engine");
 #endif
     blob->startLoading();
@@ -1159,7 +1169,7 @@ void QQmlTypeLoader::loadThread(QQmlDataBlob *blob)
         }
 
 #ifdef DATABLOB_DEBUG
-        qWarning("QQmlDataBlob: requested %s", qPrintable(blob->url().toString()));
+        qWarning("QQmlDataBlob: requested %s", qPrintable(blob->urlString()));
 #endif // DATABLOB_DEBUG
 #endif // qml_network
     }
@@ -1185,14 +1195,15 @@ void QQmlTypeLoader::networkReplyFinished(QNetworkReply *reply)
         QVariant redirect = reply->attribute(QNetworkRequest::RedirectionTargetAttribute);
         if (redirect.isValid()) {
             QUrl url = reply->url().resolved(redirect.toUrl());
-            blob->m_finalUrl = url;
+            blob->m_url = url;
+            blob->m_urlString.clear();
 
             QNetworkReply *reply = m_thread->networkAccessManager()->get(QNetworkRequest(url));
             QObject *nrp = m_thread->networkReplyProxy();
             QObject::connect(reply, SIGNAL(finished()), nrp, SLOT(finished()));
             m_networkReplies.insert(reply, blob);
 #ifdef DATABLOB_DEBUG
-            qWarning("QQmlDataBlob: redirected to %s", qPrintable(blob->m_finalUrl.toString()));
+            qWarning("QQmlDataBlob: redirected to %s", qPrintable(blob->urlString()));
 #endif
             return;
         }
@@ -1348,7 +1359,7 @@ bool QQmlTypeLoader::Blob::fetchQmldir(const QUrl &url, const QV4::CompiledData:
 
 bool QQmlTypeLoader::Blob::updateQmldir(QQmlQmldirData *data, const QV4::CompiledData::Import *import, QList<QQmlError> *errors)
 {
-    QString qmldirIdentifier = data->url().toString();
+    QString qmldirIdentifier = data->urlString();
     QString qmldirUrl = qmldirIdentifier.left(qmldirIdentifier.lastIndexOf(QLatin1Char('/')) + 1);
 
     typeLoader()->setQmldirContent(qmldirIdentifier, data->content());
@@ -1436,8 +1447,13 @@ bool QQmlTypeLoader::Blob::addImport(const QV4::CompiledData::Import *import, QL
                 // We haven't yet resolved this import
                 m_unresolvedImports.insert(import, 0);
 
-                // Query any network import paths for this library
-                QStringList remotePathList = importDatabase->importPathList(QQmlImportDatabase::Remote);
+                QQmlAbstractUrlInterceptor *interceptor = typeLoader()->engine()->urlInterceptor();
+
+                // Query any network import paths for this library.
+                // Interceptor might redirect local paths.
+                QStringList remotePathList = importDatabase->importPathList(
+                            interceptor ? QQmlImportDatabase::LocalOrRemote
+                                        : QQmlImportDatabase::Remote);
                 if (!remotePathList.isEmpty()) {
                     // Add this library and request the possible locations for it
                     if (!m_importCache.addLibraryImport(importDatabase, importUri, importQualifier, import->majorVersion,
@@ -1448,8 +1464,18 @@ bool QQmlTypeLoader::Blob::addImport(const QV4::CompiledData::Import *import, QL
                     int priority = 0;
                     const QStringList qmlDirPaths = QQmlImports::completeQmldirPaths(importUri, remotePathList, import->majorVersion, import->minorVersion);
                     for (const QString &qmldirPath : qmlDirPaths) {
-                        if (!fetchQmldir(QUrl(qmldirPath), import, ++priority, errors))
+                        if (interceptor) {
+                            QUrl url = interceptor->intercept(
+                                        QQmlImports::urlFromLocalFileOrQrcOrUrl(qmldirPath),
+                                        QQmlAbstractUrlInterceptor::QmldirFile);
+                            if (!QQmlFile::isLocalFile(url)
+                                    && !fetchQmldir(url, import, ++priority, errors)) {
+                                return false;
+                            }
+                        } else if (!fetchQmldir(QUrl(qmldirPath), import, ++priority, errors)) {
                             return false;
+                        }
+
                     }
                 }
             }
@@ -1872,19 +1898,22 @@ It can also be a remote path for a remote directory import, but it will have bee
 */
 const QQmlTypeLoaderQmldirContent *QQmlTypeLoader::qmldirContent(const QString &filePathIn)
 {
-    QUrl url(filePathIn); //May already contain http scheme
-    if (url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https"))
-        return *(m_importQmlDirCache.value(filePathIn)); //Can't load the remote here, but should be cached
-    else
-        url = QUrl::fromLocalFile(filePathIn);
-    if (engine() && engine()->urlInterceptor())
-        url = engine()->urlInterceptor()->intercept(url, QQmlAbstractUrlInterceptor::QmldirFile);
-    Q_ASSERT(url.scheme() == QLatin1String("file"));
     QString filePath;
-    if (url.scheme() == QLatin1String("file"))
-        filePath = url.toLocalFile();
-    else
-        filePath = url.path();
+
+    // Try to guess if filePathIn is already a URL. This is necessarily fragile, because
+    // - paths can contain ':', which might make them appear as URLs with schemes.
+    // - windows drive letters appear as schemes (thus "< 2" below).
+    // - a "file:" URL is equivalent to the respective file, but will be treated differently.
+    // Yet, this heuristic is the best we can do until we pass more structured information here,
+    // for example a QUrl also for local files.
+    QUrl url(filePathIn);
+    if (url.scheme().length() < 2) {
+        filePath = filePathIn;
+    } else {
+        filePath = QQmlFile::urlToLocalFileOrQrc(url);
+        if (filePath.isEmpty()) // Can't load the remote here, but should be cached
+            return *(m_importQmlDirCache.value(filePathIn));
+    }
 
     QQmlTypeLoaderQmldirContent *qmldir;
     QQmlTypeLoaderQmldirContent **val = m_importQmlDirCache.value(filePath);
@@ -2086,7 +2115,7 @@ bool QQmlTypeData::tryLoadFromDiskCache()
     {
         QString error;
         if (!unit->loadFromDisk(url(), m_backupSourceCode.sourceTimeStamp(), v4->iselFactory.data(), &error)) {
-            qCDebug(DBG_DISK_CACHE) << "Error loading" << url().toString() << "from disk cache:" << error;
+            qCDebug(DBG_DISK_CACHE) << "Error loading" << urlString() << "from disk cache:" << error;
             return false;
         }
     }
@@ -2206,10 +2235,10 @@ void QQmlTypeData::done()
         if (script.script->isError()) {
             QList<QQmlError> errors = script.script->errors();
             QQmlError error;
-            error.setUrl(finalUrl());
+            error.setUrl(url());
             error.setLine(script.location.line);
             error.setColumn(script.location.column);
-            error.setDescription(QQmlTypeLoader::tr("Script %1 unavailable").arg(script.script->url().toString()));
+            error.setDescription(QQmlTypeLoader::tr("Script %1 unavailable").arg(script.script->urlString()));
             errors.prepend(error);
             setError(errors);
             return;
@@ -2226,7 +2255,7 @@ void QQmlTypeData::done()
 
             QList<QQmlError> errors = type.typeData->errors();
             QQmlError error;
-            error.setUrl(finalUrl());
+            error.setUrl(url());
             error.setLine(type.location.line);
             error.setColumn(type.location.column);
             error.setDescription(QQmlTypeLoader::tr("Type %1 unavailable").arg(typeName));
@@ -2245,7 +2274,7 @@ void QQmlTypeData::done()
 
             QList<QQmlError> errors = type.typeData->errors();
             QQmlError error;
-            error.setUrl(finalUrl());
+            error.setUrl(url());
             error.setLine(type.location.line);
             error.setColumn(type.location.column);
             error.setDescription(QQmlTypeLoader::tr("Type %1 unavailable").arg(typeName));
@@ -2275,7 +2304,7 @@ void QQmlTypeData::done()
 
     // verify if any dependencies changed if we're using a cache
     if (m_document.isNull() && !m_compiledData->verifyChecksum(dependencyHasher)) {
-        qCDebug(DBG_DISK_CACHE) << "Checksum mismatch for cached version of" << m_compiledData->url().toString();
+        qCDebug(DBG_DISK_CACHE) << "Checksum mismatch for cached version of" << m_compiledData->fileName();
         if (!loadFromSource())
             return;
         m_backupSourceCode = SourceCodeData();
@@ -2440,7 +2469,7 @@ bool QQmlTypeData::loadFromSource()
         errors.reserve(compiler.errors.count());
         for (const QQmlJS::DiagnosticMessage &msg : qAsConst(compiler.errors)) {
             QQmlError e;
-            e.setUrl(finalUrl());
+            e.setUrl(url());
             e.setLine(msg.loc.startLine);
             e.setColumn(msg.loc.startColumn);
             e.setDescription(msg.message);
@@ -2457,7 +2486,8 @@ void QQmlTypeData::restoreIR(QQmlRefPointer<QV4::CompiledData::CompilationUnit> 
     m_document.reset(new QmlIR::Document(isDebugging()));
     QmlIR::IRLoader loader(unit->data, m_document.data());
     loader.load();
-    m_document->jsModule.setFileName(finalUrlString());
+    m_document->jsModule.setFileName(urlString());
+    m_document->jsModule.setFinalUrl(finalUrlString());
     m_document->javaScriptCompilationUnit = unit;
     continueLoadFromIR();
 }
@@ -2580,7 +2610,7 @@ void QQmlTypeData::compile(const QQmlRefPointer<QQmlTypeNameCache> &typeNameCach
                 // ignore error, keep using the in-memory compilation unit.
             }
         } else {
-            qCDebug(DBG_DISK_CACHE) << "Error saving cached version of" << m_compiledData->url().toString() << "to disk:" << errorString;
+            qCDebug(DBG_DISK_CACHE) << "Error saving cached version of" << m_compiledData->fileName() << "to disk:" << errorString;
         }
     }
 }
@@ -2951,7 +2981,7 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
             initializeFromCompilationUnit(unit);
             return;
         } else {
-            qCDebug(DBG_DISK_CACHE()) << "Error loading" << url().toString() << "from disk cache:" << error;
+            qCDebug(DBG_DISK_CACHE()) << "Error loading" << urlString() << "from disk cache:" << error;
         }
     }
 
@@ -2969,7 +2999,9 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
     QmlIR::ScriptDirectivesCollector collector(&irUnit.jsParserEngine, &irUnit.jsGenerator);
 
     QList<QQmlError> errors;
-    QQmlRefPointer<QV4::CompiledData::CompilationUnit> unit = QV4::Script::precompile(&irUnit.jsModule, &irUnit.jsGenerator, v4, finalUrl(), source, &errors, &collector);
+    QQmlRefPointer<QV4::CompiledData::CompilationUnit> unit = QV4::Script::precompile(
+                &irUnit.jsModule, &irUnit.jsGenerator, v4, urlString(), finalUrlString(),
+                source, &errors, &collector);
     // No need to addref on unit, it's initial refcount is 1
     source.clear();
     if (!errors.isEmpty()) {
@@ -2993,7 +3025,7 @@ void QQmlScriptBlob::dataReceived(const SourceCodeData &data)
     if (!disableDiskCache() || forceDiskCache()) {
         QString errorString;
         if (!unit->saveToDisk(url(), &errorString)) {
-            qCDebug(DBG_DISK_CACHE()) << "Error saving cached version of" << unit->url().toString() << "to disk:" << errorString;
+            qCDebug(DBG_DISK_CACHE()) << "Error saving cached version of" << unit->fileName() << "to disk:" << errorString;
         }
     }
 
@@ -3017,10 +3049,10 @@ void QQmlScriptBlob::done()
         if (script.script->isError()) {
             QList<QQmlError> errors = script.script->errors();
             QQmlError error;
-            error.setUrl(finalUrl());
+            error.setUrl(url());
             error.setLine(script.location.line);
             error.setColumn(script.location.column);
-            error.setDescription(QQmlTypeLoader::tr("Script %1 unavailable").arg(script.script->url().toString()));
+            error.setDescription(QQmlTypeLoader::tr("Script %1 unavailable").arg(script.script->urlString()));
             errors.prepend(error);
             setError(errors);
             return;

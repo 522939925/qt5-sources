@@ -39,6 +39,7 @@
 #include "qquickcontrol_p.h"
 #include "qquickcontrol_p_p.h"
 #include "qquickscrollview_p.h"
+#include "qquickdeferredexecute_p_p.h"
 
 #include <QtQml/qqmlinfo.h>
 #include <QtQuick/private/qquickitem_p.h>
@@ -391,6 +392,26 @@ QAccessible::Role QQuickTextAreaPrivate::accessibleRole() const
 }
 #endif
 
+static inline QString backgroundName() { return QStringLiteral("background"); }
+
+void QQuickTextAreaPrivate::cancelBackground()
+{
+    Q_Q(QQuickTextArea);
+    quickCancelDeferred(q, backgroundName());
+}
+
+void QQuickTextAreaPrivate::executeBackground(bool complete)
+{
+    Q_Q(QQuickTextArea);
+    if (background.wasExecuted())
+        return;
+
+    if (!background || complete)
+        quickBeginDeferred(q, backgroundName(), background);
+    if (complete)
+        quickCompleteDeferred(q, backgroundName(), background);
+}
+
 QQuickTextArea::QQuickTextArea(QQuickItem *parent)
     : QQuickTextEdit(*(new QQuickTextAreaPrivate), parent)
 {
@@ -444,7 +465,9 @@ void QQuickTextArea::setFont(const QFont &font)
 */
 QQuickItem *QQuickTextArea::background() const
 {
-    Q_D(const QQuickTextArea);
+    QQuickTextAreaPrivate *d = const_cast<QQuickTextAreaPrivate *>(d_func());
+    if (!d->background)
+        d->executeBackground();
     return d->background;
 }
 
@@ -454,7 +477,10 @@ void QQuickTextArea::setBackground(QQuickItem *background)
     if (d->background == background)
         return;
 
-    QQuickControlPrivate::destroyDelegate(d->background, this);
+    if (!d->background.isExecuting())
+        d->cancelBackground();
+
+    delete d->background;
     d->background = background;
     if (background) {
         background->setParentItem(this);
@@ -463,7 +489,8 @@ void QQuickTextArea::setBackground(QQuickItem *background)
         if (isComponentComplete())
             d->resizeBackground();
     }
-    emit backgroundChanged();
+    if (!d->background.isExecuting())
+        emit backgroundChanged();
 }
 
 /*!
@@ -607,6 +634,7 @@ void QQuickTextArea::classBegin()
 void QQuickTextArea::componentComplete()
 {
     Q_D(QQuickTextArea);
+    d->executeBackground(true);
     QQuickTextEdit::componentComplete();
 #if QT_CONFIG(quicktemplates2_hover)
     if (!d->explicitHoverEnabled)
